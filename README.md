@@ -2,6 +2,10 @@
 
 基于 Astro、React、Fastify 和 SQLite 的独立博客，支持 Markdown / HTML 编辑、历史版本、草稿与发布分离、媒体管理、评论和备份。使用 Node.js 24 LTS，最低 24.22.1（版本文件见 `.node-version`）。
 
+## 独立子站
+
+主站后台“子站”可填写主站/子站地址并生成一次性接入码和部署命令。子站使用独立轻量镜像，文章范围、主题、顶部导航和备案信息由主站管理；程序更新由主站发起、子站从固定 GitHub 仓库构建。详见 [子站部署与安全边界](docs/REPLICA-SITES.md)。DNS、TLS、Docker 安装仍由部署者完成。
+
 ## Docker Compose 部署
 
 仓库提供 `Dockerfile`、`Dockerfile.updater` 和 `compose.yaml`，可在支持 Docker Compose 的 Linux 服务器上运行。

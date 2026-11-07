@@ -254,3 +254,9 @@ curl --fail http://127.0.0.1:4322/api/health
 | 媒体 404 | data/media 路径、assetMap、迁移缺失清单；不直接伪造原件 |
 | 突然退出后版本不一致 | current/content.json、published_data、jobs、release；按一致性边界恢复 |
 | 磁盘持续增加 | releases、保留哈希资产、backups、媒体与 Docker 日志；无应用层自动保留策略 |
+
+## 独立子站部署
+
+流程见 [独立受管子站](REPLICA-SITES.md)。主站使用原有 compose.yaml，不设置 SITE_ROLE。子站使用 compose.replica.yaml，环境含 PRIMARY_URL、首次 ENROLL_CODE、COMPOSE_PROJECT_NAME、APP_REVISION；执行器固定 UPDATE_MODE=replica，主站不需要内网连接子站。子站服务端默认同步间隔 20 秒（SYNC_INTERVAL_SECONDS），失败退避至最多 10 分钟。
+
+新后台和子站构建代码上线需要重新构建主站镜像；前台样式未修改，但每个子站需生成并成功拉取自己的静态版本，不能将容器 healthy 当作内容同步完成。端口 4322 默认仅绑定回环；使用 [Nginx 子站样例](../deploy/nginx-replica.conf)，覆盖客户端 IP 头并按实际 CDN 配置可信 real-IP。一次性部署命令中仍含敏感认证码，不能提交或公开记录。

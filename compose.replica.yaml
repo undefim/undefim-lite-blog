@@ -1,0 +1,80 @@
+# Replica site. Generated deploy command (primary admin -> 子站) writes .env and runs:
+#   docker compose -f compose.replica.yaml up -d --build
+# The service is named blog so the shared updater can update it; updates are requested from the primary admin and
+# always fetched from the fixed GitHub repository, never sent by the primary.
+services:
+  blog:
+    build:
+      context: .
+      dockerfile: Dockerfile.replica
+      args:
+        APP_REVISION: "${APP_REVISION:-unknown}"
+    image: "${BLOG_IMAGE:-undefim-blog-replica:local}"
+    restart: unless-stopped
+    init: true
+    depends_on:
+      updater:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:4322:4322"
+    environment:
+      PRIMARY_URL: "${PRIMARY_URL:?set PRIMARY_URL}"
+      ENROLL_CODE: "${ENROLL_CODE:-}"
+      TRUST_PROXY: "true"
+    volumes:
+      - ./data:/app/data
+    mem_limit: 256m
+    cpus: 1
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+  updater:
+    build:
+      context: .
+      dockerfile: Dockerfile.updater
+    image: "${UPDATER_IMAGE:-undefim-blog-updater:local}"
+    restart: always
+    init: true
+    working_dir: "${BLOG_REPO_DIR:-${PWD}}"
+    environment:
+      BLOG_IMAGE: "${BLOG_IMAGE:-undefim-blog-replica:local}"
+      UPDATER_IMAGE: "${UPDATER_IMAGE:-undefim-blog-updater:local}"
+      COMPOSE_PROJECT_NAME: "${COMPOSE_PROJECT_NAME}"
+      BLOG_REPO_DIR: "${BLOG_REPO_DIR:-${PWD}}"
+      UPDATE_REPO_DIR: "${BLOG_REPO_DIR:-${PWD}}"
+      UPDATE_DATA_DIR: "${BLOG_REPO_DIR:-${PWD}}/data"
+      UPDATE_REPOSITORY: "${UPDATE_REPOSITORY:-undefim/undefim-lite-blog}"
+      UPDATE_BRANCH: "${UPDATE_BRANCH:-main}"
+      UPDATE_PROJECT: "${COMPOSE_PROJECT_NAME}"
+      UPDATE_HEALTH_URL: "http://blog:4322/api/health"
+      UPDATE_RUNTIME: compose
+      UPDATE_MODE: replica
+    volumes:
+      - type: bind
+        source: "${BLOG_REPO_DIR:-${PWD}}"
+        target: "${BLOG_REPO_DIR:-${PWD}}"
+      - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      test: ["CMD", "node", "-e", "const fs=require('fs');try{const s=JSON.parse(fs.readFileSync(process.env.UPDATE_DATA_DIR+'/system-update/status.json'));process.exit(s.heartbeatAt&&Date.now()-Date.parse(s.heartbeatAt)<45000?0:1)}catch{process.exit(1)}"]
+      interval: 10s
+      timeout: 3s
+      start_period: 30s
+      retries: 3
+    stop_grace_period: 30m
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"

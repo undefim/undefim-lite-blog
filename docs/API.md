@@ -186,3 +186,31 @@ const imported = await write('/import', form);
 ```
 
 接口增加/修改时同步更新此文档及调用方，涉及隐私和发布行为还必须更新数据模型与回归测试。
+
+## 独立子站
+
+以下管理接口需要现有管理员 Cookie；写操作沿用 CSRF、Origin、维护写屏障和 no-store。
+
+| 方法 | 路径 | 输入与结果 |
+| --- | --- | --- |
+| GET | `/api/replicas` | `{primaryRevision,replicas}`，不返回认证哈希或长期令牌 |
+| POST | `/api/replicas` | `{name,primaryUrl,siteUrl}`；返回 `{replica,code,command,expiresAt}`，仅此次显示认证码 |
+| PUT | `/api/replicas/:id` | `{name,siteUrl,mode,documentIds,settings}`；mode 为 all/selected，保存后排队构建 |
+| POST | `/api/replicas/:id/code` | 可选 `{primaryUrl}`；重新生成认证码与部署命令，旧认证码失效 |
+| POST | `/api/replicas/:id/build` | 202；强制重新构建已接入子站 |
+| POST | `/api/replicas/:id/update` | 202；请求更新至主站运行中的提交，版本未知时 409 |
+| POST | `/api/replicas/:id/revoke` | 吊销凭据，停止后续同步/评论代理；不远程删除子站现存页面 |
+| DELETE | `/api/replicas/:id` | 删除管理记录及主站为该站生成的产物；不删除子站服务器文件 |
+
+settings 可覆盖 `siteTheme`、`title`、`description`、`announcement`、`navigation`（label/href）、`icpRecord`、`publicSecurityRecord`，其他字段拒绝；缺省键继承主站已发布设置。空备案字符串表示不显示。documentIds 的语义随 mode 改变；自定义页面始终保留。
+
+子站接入端点 `POST /api/replica/v1/enroll` 接收 `{code}`，有速率限制；返回子站 ID、长期令牌、主站/子站地址等。认证码一次性且 24 小时过期；后续接口使用 `Authorization: Replica <id>.<token>`，必须通过 HTTPS 传输，不使用后台会话。
+
+| 方法 | 路径 | 用途 |
+| --- | --- | --- |
+| POST | `/api/replica/v1/sync` | 上报 release/revision/error/update，返回目标 build、siteUrl、待执行 update |
+| GET | `/api/replica/v1/manifest?build=<id>` | 本子站版本文件路径、大小、哈希与媒体清单 |
+| GET | `/api/replica/v1/file?build=<id>&path=<relative>` | 下载本子站版本文件，不得越界 |
+| GET | `/api/replica/v1/media?path=upload/...` | 下载公开媒体 |
+
+主站 `/api/health` 保持原有契约。轻量子站的 `/api/health` 额外报告 role、release、enrolled；healthy 仅代表程序在线，不保证已接入或已同步。子站不开放管理接口，`/admin/` 跳转主站；`/api/public/*` 经子站凭据转发至主站，访客原始 Cookie/身份敏感头不能任意转交。详见 [子站运维及限制](REPLICA-SITES.md)。

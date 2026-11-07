@@ -9,6 +9,7 @@
 | [API 参考](API.md) | 所有业务接口、鉴权、请求与响应、错误、字段约束 |
 | [开发与运维](OPERATIONS.md) | 本地开发、环境变量、验证、正式部署、CDN、备份和故障恢复 |
 | [AI 维护指引与提示词](AI-MAINTENANCE.md) | 按任务定位必读文件、改动点、验证和文档更新要求 |
+| [独立受管子站](REPLICA-SITES.md) | 子站接入、内容范围、外观、GitHub 更新、数据库升级与回退 |
 | [维护记录](CHANGELOG.md) | 文档与实现的重要变更、核验范围 |
 
 业务使用方法见 [项目 README](../README.md)；迁移注意事项见 [MIGRATION-STATUS.md](../MIGRATION-STATUS.md)。生产验收、实际主机地址、备份位置及内容统计仅保留在私有环境，公开文档不作为实时生产状态记录。

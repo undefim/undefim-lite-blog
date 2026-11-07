@@ -147,3 +147,7 @@ flowchart LR
 ## 后续可选改进（未实现）
 
 版本化数据库迁移；后台组件拆分与类型收紧；更完整 ZIP 引用改写与批量导入事务；发布崩溃恢复日志和共享队列；媒体 MIME 检查与私有媒体权限；release/备份保留策略与异地定时备份；结构化 OpenAPI 与自动契约校验。按真实需求实施，不把这些写成当前能力。
+
+## 独立受管子站
+
+主站 `replica-hub.mjs` 提供管理、接入、同步接口；`replica-build.mjs` 在现有单进程发布队列中按子站规则过滤当前公开快照，使用子站域名构建。`replica/agent.mjs` 和 `replica/server.mjs` 是无 npm 依赖的子站程序：主动拉取、原子切换、静态服务和公开评论代理。`Dockerfile.replica` 不包含数据库、后台或 Astro；`compose.replica.yaml` 保留独立 updater，后者从固定仓库更新程序。详细流程和能力边界见 [独立受管子站](REPLICA-SITES.md)。旧同域名 rsync 推送方案不再适用。
