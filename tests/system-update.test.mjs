@@ -178,7 +178,7 @@ test('执行器配置只接受固定 GitHub 来源、本机或限定 Compose 健
  for(const env of [{UPDATE_PROJECT:'blog',UPDATE_REPOSITORY:'https://evil.example/repo'},{UPDATE_PROJECT:'blog',UPDATE_BRANCH:'--upload-pack=anything'},{UPDATE_PROJECT:'blog',UPDATE_BRANCH:'a/../b'},{UPDATE_PROJECT:'blog',UPDATE_HEALTH_URL:'https://evil.example/api/health'},{}])assert.throws(()=>workerOptions(env));
 });
 
-async function scenario({withUpdater=false,extraService=false,runtimeChanged=false,failAt,dirty=false,diverged=false,same=false,stale=false,contractChanged=false,publishDuringBuild=false,rollbackFails=false,repository='example/blog',remote=`https://github.com/${repository}.git`}={}){
+async function scenario({withUpdater=false,extraService=false,runtimeChanged=false,failAt,dirty=false,diverged=false,same=false,stale=false,contractChanged=false,publishDuringBuild=false,rollbackFails=false,repository='example/blog',remote=`https://github.com/${repository}.git`,mode,targetRevision,offBranch=false}={}){
  const repoDir=await fresh(),dataDir=path.join(repoDir,'data');
  await fs.mkdir(path.join(dataDir,'backups'),{recursive:true});
  const from='a'.repeat(40),to=same?from:'b'.repeat(40),oldImage='sha256:'+'c'.repeat(64),backup='2026-11-02-12345678-1234-1234-1234-123456789abc.zip';
@@ -199,6 +199,7 @@ async function scenario({withUpdater=false,extraService=false,runtimeChanged=fal
    if(command.includes('rev-parse HEAD'))return head;
    if(command.includes('rev-parse refs/remotes'))return to;
    if(command.includes('merge-base')&&diverged)throw new Error('diverged');
+   if(command.includes('merge-base')&&offBranch&&command.includes(targetRevision))throw new Error('not on branch');
    if(command.includes('merge --ff-only')){head=to;return ''}
    if(command.includes('reset --hard')){head=from;return ''}
    return '';
@@ -210,13 +211,13 @@ async function scenario({withUpdater=false,extraService=false,runtimeChanged=fal
   if(command.includes('exec -T blog node scripts/backup.mjs')){if(failAt==='backup')throw new Error('模拟备份失败');return `/app/data/backups/${backup}`}
   if(command.includes('stop blog'))stopped=true;
   if(command.includes('up -d')&&rollbackFails&&head===from)throw new Error('模拟旧服务恢复失败');
-  if(command.includes('up -d')){newService=head===to;stopped=false;if(newService&&failAt==='startup')throw new Error('模拟服务启动失败');if(head===to)await fs.writeFile(path.join(dataDir,'application-revision'),to)}
+  if(command.includes('up -d')){newService=head===to;stopped=false;if(newService&&failAt==='startup')throw new Error('模拟服务启动失败');if(head===to&&mode!=='replica')await fs.writeFile(path.join(dataDir,'application-revision'),to)}
   return '';
  };
  let healthChecks=0;
  const health=async()=>({ok:true,revision:stale?'e'.repeat(40):head,publishing:0,writes:0});
  const wait=async(fn,predicate)=>{healthChecks++;if(failAt==='health'&&newService&&head===to)throw new Error('模拟新服务健康检查失败');assert.equal(predicate(await fn()),true)};
- const result=await executeUpdate({repoDir,dataDir,repository,branch:'main',project:'blog',healthUrl:'http://127.0.0.1:4322/api/health'},{run,health,wait,report:async change=>reports.push(change)});
+ const result=await executeUpdate({repoDir,dataDir,repository,branch:'main',project:'blog',healthUrl:'http://127.0.0.1:4322/api/health',...(mode?{mode,composeFile:mode==='replica'?'compose.replica.yaml':'compose.yaml'}:{}),...(targetRevision?{targetRevision}:{})},{run,health,wait,report:async change=>reports.push(change)});
  return {result,calls,reports,head,from,to,stopped,healthChecks,dataDir};
 }
 
@@ -363,3 +364,26 @@ test('真实初始化按镜像版本重建公开快照，同版本重启不重�
 });
 
 test.after(async()=>{db.close();await fs.rm(root,{recursive:true,force:true})});
+
+test('子站模式使用子站 Compose 文件、跳过备份与静态标记，并只更新到跟踪分支上的指定提交',async()=>{
+ assert.equal(workerOptions({UPDATE_PROJECT:'blog-replica',UPDATE_MODE:'replica'}).composeFile,'compose.replica.yaml');
+ assert.equal(workerOptions({UPDATE_PROJECT:'blog'}).composeFile,'compose.yaml');
+ assert.throws(()=>workerOptions({UPDATE_PROJECT:'blog',UPDATE_MODE:'other'}));
+ const target='b'.repeat(40);
+ const ok=await scenario({withUpdater:true,mode:'replica',targetRevision:target});
+ assert.equal(ok.result.status,'success',ok.result.message);assert.equal(ok.head,target);assert.equal(ok.result.backup,undefined);
+ assert.ok(!ok.calls.some(c=>c.includes('scripts/backup.mjs')),'子站不备份');
+ assert.ok(ok.calls.filter(c=>c.includes(' -f ')).every(c=>c.includes('compose.replica.yaml')),'只使用子站 Compose 文件');
+ assert.ok(ok.calls.some(c=>c.includes(`merge-base --is-ancestor ${target} refs/remotes/origin/main`)));
+ const rejected=await scenario({withUpdater:true,mode:'replica',targetRevision:target,offBranch:true});
+ assert.equal(rejected.result.status,'failed');assert.match(rejected.result.message,/跟踪分支/);assert.ok(!rejected.calls.some(c=>c.includes('build blog')));
+});
+
+test('更新请求可携带目标提交并传给执行流程，格式不符的请求被拒绝',async()=>{
+ const dataDir=await fresh(),directory=path.join(dataDir,'system-update');const state={};let received;
+ const execute=async opts=>{received=opts;return {status:'success',from:'a'.repeat(40),to:opts.targetRevision}};
+ await publishUpdateRequest(directory,{id:'12345678-1234-1234-1234-123456789abc',trigger:'manual',requestedAt:new Date().toISOString(),revision:'c'.repeat(40)});
+ assert.equal(await workerTick({dataDir},state,{execute}),'success');assert.equal(received.targetRevision,'c'.repeat(40));
+ await publishUpdateRequest(directory,{id:'12345678-1234-1234-1234-123456789abd',trigger:'manual',requestedAt:new Date().toISOString(),revision:'main; rm -rf /'});
+ await assert.rejects(workerTick({dataDir},state,{execute}),/格式无效/);
+});

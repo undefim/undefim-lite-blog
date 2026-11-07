@@ -26,7 +26,10 @@ export function workerOptions(env=process.env){
  const url=new URL(healthUrl);
  const container=env.UPDATE_RUNTIME==='compose';
  requireValue(url.protocol==='http:'&&['127.0.0.1','[::1]','localhost',...(container?['blog']:[])].includes(url.hostname)&&!url.username&&!url.password&&url.pathname==='/api/health','健康检查必须使用本机或 Compose 内 blog 的 /api/health');
- return {repoDir,dataDir,repository,branch,project,healthUrl};
+ // replica: the lightweight replica stack (compose.replica.yaml). It has no database, backups or static build marker.
+ const mode=(env.UPDATE_MODE||'primary')==='replica'?'replica':'primary';
+ requireValue(['primary','replica'].includes(env.UPDATE_MODE||'primary'),'UPDATE_MODE 只能是 primary 或 replica');
+ return {repoDir,dataDir,repository,branch,project,healthUrl,mode,composeFile:mode==='replica'?'compose.replica.yaml':'compose.yaml'};
 }
 export async function readHealth(url){try{const response=await fetch(url,{signal:AbortSignal.timeout(3000),redirect:'error'});return response.ok?await response.json():null}catch{return null}}
 export async function waitForHealth(health,predicate,{attempts=180,delay=3000}={}){
@@ -43,12 +46,12 @@ function composeContract(config,dataDir){
  return {image:service.image,volumes:service.volumes,ports:service.ports,user:service.user,updater:config.services.updater};
 }
 export async function executeUpdate(options,{run=command,health=()=>readHealth(options.healthUrl),report=async()=>{},wait=waitForHealth}={}){
- const {repoDir,dataDir,branch,repository,project}=options;
+ const {repoDir,dataDir,branch,repository,project,targetRevision}=options;const replica=options.mode==='replica',composeFile=options.composeFile||'compose.yaml';
  const git=(...args)=>run('git',['-c','core.hooksPath=/dev/null','-c','protocol.file.allow=never','-c','protocol.ext.allow=never',...args],{cwd:repoDir});
  const envFile=path.join(repoDir,'.env');
  const envArgs=await fs.access(envFile).then(()=>['--env-file',envFile]).catch(e=>{if(e.code==='ENOENT')return [];throw e});
  const compose=(file,...args)=>run('docker',['compose','--project-name',project,...envArgs,'--project-directory',repoDir,'-f',file,...args],{cwd:repoDir,timeout:20*60*1000});
- const liveCompose=path.join(repoDir,'compose.yaml');
+ const liveCompose=path.join(repoDir,composeFile);
  let from,to,oldImage,contract,worktree,buildOverride,codeChanged=false,serviceTouched=false,oldCurrent,oldMarker;
  const progress=async(message,extra={})=>report({message,...extra});
  const clean=async()=>requireValue(!(await git('status','--porcelain','--untracked-files=all')),'部署工作区有本地修改或未跟踪文件，已拒绝覆盖；请先由维护者处理');
@@ -65,9 +68,11 @@ export async function executeUpdate(options,{run=command,health=()=>readHealth(o
   await git('fetch','--no-tags',`https://github.com/${repository}.git`,`+refs/heads/${branch}:refs/remotes/origin/${branch}`);
   to=await git('rev-parse',`refs/remotes/origin/${branch}`);
   requireValue(/^[0-9a-f]{40,64}$/.test(to),'远端版本无效');
+  // A pinned target (replica updates requested by the primary) must be a commit already on the tracked branch.
+  if(targetRevision){requireValue(/^[0-9a-f]{40,64}$/.test(targetRevision),'目标版本格式无效');try{await git('merge-base','--is-ancestor',targetRevision,`refs/remotes/origin/${branch}`)}catch{throw new Error('目标版本不在固定仓库的跟踪分支上，已拒绝更新')}to=targetRevision}
   await progress('已获取远端版本。',{to});
   const currentHealth=await health();
-  const marker=await fs.readFile(path.join(dataDir,'application-revision'),'utf8').catch(e=>{if(e.code==='ENOENT')return null;throw e});
+  const marker=replica?to:await fs.readFile(path.join(dataDir,'application-revision'),'utf8').catch(e=>{if(e.code==='ENOENT')return null;throw e});
   if(from===to&&currentHealth?.ok&&currentHealth.revision===from&&marker===from)return {status:'unchanged',from,to,message:'当前运行程序与静态版本均为跟踪分支的最新版本。'};
   try{await git('merge-base','--is-ancestor',from,to)}catch{throw new Error('本地与远端分支发生分叉或远端回退，禁止自动覆盖')}
   // Runtime tooling cannot safely replace the container that is supervising this job.
@@ -78,26 +83,29 @@ export async function executeUpdate(options,{run=command,health=()=>readHealth(o
   const staging=await fs.mkdtemp(path.join(os.tmpdir(),'blog-update-'));
   worktree=path.join(staging,'source');buildOverride=path.join(staging,'build.json');
   await git('worktree','add','--detach',worktree,to);
-  const candidateConfig=JSON.parse(await compose(path.join(worktree,'compose.yaml'),'config','--format','json'));
+  const candidateConfig=JSON.parse(await compose(path.join(worktree,composeFile),'config','--format','json'));
   const candidateContract=composeContract(candidateConfig,dataDir);
   requireValue(JSON.stringify(candidateContract)===JSON.stringify(contract),'此次提交改变镜像名、数据挂载、端口或运行用户，必须由维护者手动部署');
-  const candidateImage=`undefim-blog-update:${to}`;
+  const candidateImage=`undefim-blog-update:${replica?'replica':'primary'}-${project}-${randomUUID()}`;
   await writeUpdateFile(buildOverride,{services:{blog:{image:candidateImage,build:{context:worktree,args:{APP_REVISION:to}}}}});
   await progress('正在隔离工作树构建新镜像，当前服务仍可访问。');
-  await run('docker',['compose','--project-name',project,...envArgs,'--project-directory',repoDir,'-f',path.join(worktree,'compose.yaml'),'-f',buildOverride,'build','blog'],{cwd:repoDir,timeout:20*60*1000});
+  await run('docker',['compose','--project-name',project,...envArgs,'--project-directory',repoDir,'-f',path.join(worktree,composeFile),'-f',buildOverride,'build','blog'],{cwd:repoDir,timeout:20*60*1000});
   await clean();requireValue(await git('rev-parse','HEAD')===from,'构建期间本地版本已变化，已停止更新');
   await progress('暂停写操作，等待已有发布完成。',{maintenance:true});
   await wait(health,value=>value.publishing===0&&value.writes===0,{attempts:120,delay:3000});
   oldImage=await run('docker',['inspect','--format','{{.Image}}',container],{cwd:repoDir});
   requireValue(/^sha256:[0-9a-f]{64}$/.test(oldImage),'无法保留旧镜像，已停止更新');
+  let backup;
+  if(!replica){
   oldCurrent=await fs.readlink(path.join(dataDir,'current'));
   try{oldMarker=await fs.readFile(path.join(dataDir,'application-revision'),'utf8')}catch(e){if(e.code!=='ENOENT')throw e}
   await progress('正在创建更新前的完整备份。');
   const backupOutput=await compose(liveCompose,'exec','-T','blog','node','scripts/backup.mjs');
-  const backup=path.basename(backupOutput.split('\n').at(-1)||'');
+  backup=path.basename(backupOutput.split('\n').at(-1)||'');
   requireValue(/^\d{4}-\d{2}-\d{2}-[a-f0-9-]+\.zip$/.test(backup),'备份未返回有效文件名，已停止更新');
   await fs.access(path.join(dataDir,'backups',backup));
   await progress('备份完成，准备切换代码和镜像。',{backup});
+  }else await progress('子站没有数据库，内容可随时从主站重新同步，跳过备份。');
   await clean();requireValue(await git('rev-parse','HEAD')===from,'切换前本地版本已变化，已停止更新');
   await git('merge','--ff-only',to);codeChanged=true;
   serviceTouched=true;
@@ -106,6 +114,7 @@ export async function executeUpdate(options,{run=command,health=()=>readHealth(o
   await progress('正在启动新版本并重新生成已发布快照，请稍候。');
   await compose(liveCompose,'up','-d','--no-build','--force-recreate','--no-deps','blog');
   await wait(health,value=>value.revision===to&&value.publishing===0);
+  if(replica)return {status:'success',from,to,message:'子站程序已更新，页面内容继续由主站同步。'};
   requireValue(await fs.readFile(path.join(dataDir,'application-revision'),'utf8')===to,'静态版本标记未完成');
   return {status:'success',from,to,backup,message:'程序与已发布快照已更新，草稿、私密内容及历史版本保持不变。'};
  }catch(error){
@@ -117,11 +126,13 @@ export async function executeUpdate(options,{run=command,health=()=>readHealth(o
     await clean();requireValue(await git('rev-parse','HEAD')===to,'本地版本被其他操作修改，拒绝自动回退覆盖');
     await git('reset','--hard',from);
     await run('docker',['image','tag',oldImage,contract.image],{cwd:repoDir});
+    if(!replica){
     const link=path.join(dataDir,`current-update-${randomUUID()}`);
     await fs.symlink(oldCurrent,link);await fs.rename(link,path.join(dataDir,'current'));
-    if(oldMarker===undefined)await fs.rm(path.join(dataDir,'application-revision'),{force:true});else await fs.writeFile(path.join(dataDir,'application-revision'),oldMarker,{mode:0o600});
+    }
+    if(!replica){if(oldMarker===undefined)await fs.rm(path.join(dataDir,'application-revision'),{force:true});else await fs.writeFile(path.join(dataDir,'application-revision'),oldMarker,{mode:0o600});}
     await compose(liveCompose,'up','-d','--no-build','--force-recreate','--no-deps','blog');
-    await wait(health,value=>!oldMarker||value.revision===oldMarker);
+    await wait(health,value=>replica?value.revision===from:!oldMarker||value.revision===oldMarker);
     rollback='已恢复旧代码、镜像与静态入口；保留当前数据库，未恢复旧备份。';
    }catch{rollback='自动回退未完成，请立即在宿主机恢复服务；数据与更新前备份均未删除。'}
   }
@@ -152,7 +163,7 @@ export async function checkForUpdate(options,{run=command,health=()=>readHealth(
   requireValue(/^[0-9a-f]{40,64}$/.test(to),'远端版本无效');
   if(from===to){
    const running=await health();
-   const marker=await fs.readFile(path.join(dataDir,'application-revision'),'utf8').catch(e=>{if(e.code==='ENOENT')return null;throw e});
+   const marker=options.mode==='replica'?from:await fs.readFile(path.join(dataDir,'application-revision'),'utf8').catch(e=>{if(e.code==='ENOENT')return null;throw e});
    if(!running?.ok)return {state:'error',checkedAt,from,to,message:'博客服务暂时无响应，无法确认当前运行版本。'};
    if(running.revision===from&&marker===from)return {state:'latest',checkedAt,from,to,message:'当前已是最新版。'};
    return {state:'available',reason:'redeploy',checkedAt,from,to,ahead:0,commits:[],message:'代码已是最新，但运行中的程序或静态版本落后，可重新部署修复。'};
@@ -190,18 +201,18 @@ export async function workerTick(options,state,{execute=executeUpdate,now=Date.n
  const config=validateUpdateConfig(await readUpdateFile(path.join(directory,'config.json'),defaultUpdateConfig));
  state.nextRunAt=nextUpdateAt(config,state,now);
  let request=await readUpdateFile(path.join(directory,'request.json'));
- if(!request&&state.nextRunAt&&Date.parse(state.nextRunAt)<=now){
+ if(options.mode!=='replica'&&!request&&state.nextRunAt&&Date.parse(state.nextRunAt)<=now){
   const automatic={id:randomUUID(),trigger:'auto',requestedAt:new Date(now).toISOString()};
   try{await publishUpdateRequest(directory,automatic);request=automatic}catch(e){if(e.statusCode!==409)throw e;request=await readUpdateFile(path.join(directory,'request.json'))}
  }
  if(!request)return;
- requireValue(/^[a-f0-9-]{36}$/.test(request.id)&&['manual','auto'].includes(request.trigger),'更新请求格式无效，请由维护者检查队列');
+ requireValue(/^[a-f0-9-]{36}$/.test(request.id)&&['manual','auto'].includes(request.trigger)&&(request.revision===undefined||/^[a-f0-9]{40,64}$/.test(request.revision)),'更新请求格式无效，请由维护者检查队列');
  const inheritedMaintenance=state.job?.maintenance===true;
  state.job={id:request.id,trigger:request.trigger,startedAt:new Date(now).toISOString(),status:'running',message:'准备检查更新。',maintenance:inheritedMaintenance};
  const save=persist||(()=>writeUpdateFile(path.join(directory,'status.json'),{...state,heartbeatAt:timestamp()}));
  await save();
  try{
-  const result=await execute(options,{report:async change=>{Object.assign(state.job,change);await save()}});
+  const result=await execute(request.revision?{...options,targetRevision:request.revision}:options,{report:async change=>{Object.assign(state.job,change);await save()}});
   Object.assign(state.job,result,{finishedAt:timestamp(),maintenance:result.status==='failed'&&(inheritedMaintenance||result.maintenance===true)});
   state.lastCheckedAt=timestamp();state.paused=result.status==='failed';
   if(result.status==='success'||result.status==='unchanged')state.revision=result.to;

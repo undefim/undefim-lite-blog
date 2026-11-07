@@ -4,6 +4,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import {defaultLicense} from './license.mjs';
 import {defaultSiteTheme} from './themes.mjs';
+import {migrateReplicaSchema} from './replica-migrations.mjs';
 
 export const dataDir = path.resolve(process.env.DATA_DIR || './data');
 mkdirSync(dataDir, { recursive: true, mode: 0o700 });
@@ -33,6 +34,8 @@ CREATE INDEX IF NOT EXISTS comment_document ON comments(document_id, status);
 CREATE TABLE IF NOT EXISTS comment_sources (id TEXT PRIMARY KEY, data TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS redirects (path TEXT PRIMARY KEY, target TEXT NOT NULL);
 `);
+
+migrateReplicaSchema(db);
 
 export const defaultSettings = {
  title: "undefim'blog", description: '技术随笔与实践记录，分享网络技术、服务器部署和生活点滴。',

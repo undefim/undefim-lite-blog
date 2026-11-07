@@ -1,0 +1,14 @@
+# Lightweight replica: Node runtime plus the replica program only. No npm install, no Astro, no database, no admin.
+# Pages are built by the primary for this replica and pulled at runtime.
+FROM node:24.22.1-bookworm-slim
+ENV NODE_ENV=production HOST=0.0.0.0 PORT=4322 DATA_DIR=/app/data
+ARG APP_REVISION=unknown
+ENV APP_REVISION=$APP_REVISION
+WORKDIR /app
+COPY server/replica-protocol.mjs server/system-update.mjs server/update-source.mjs ./server/
+COPY replica ./replica
+RUN mkdir -p /app/data && chown -R node:node /app
+USER node
+EXPOSE 4322
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 CMD node -e "fetch('http://127.0.0.1:4322/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+CMD ["node", "replica/server.mjs"]
