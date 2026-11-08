@@ -97,6 +97,16 @@ test('子站服务只提供浏览，评论经子站转发写入主站并按读�
  assert.equal((await post('203.0.113.2','另一位读者')).status,200,'不同读者不受影响');
  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM comments WHERE content LIKE '读者一的评论%' OR content='另一位读者'").get().n,4);
  const like=await fetch(`${replicaUrl}/api/public/documents/${state.a.id}/like`,{method:'POST',headers:{'x-forwarded-for':'203.0.113.3'}});assert.equal(like.status,200);assert.match(like.headers.get('set-cookie')||'',/like_/);
+ // Page views forwarded by the replica are attributed to that replica, keep one visitor per cookie and classify sources.
+ const view=(ip,referrer,cookie)=>fetch(`${replicaUrl}/api/public/pageview`,{method:'POST',headers:{'content-type':'application/json','user-agent':'Mozilla/5.0 Test',origin:'https://mirror.example.com','x-forwarded-for':ip,...(cookie?{cookie}:{})},body:JSON.stringify({path:'/archives/a',referrer})});
+ const first=await view('203.0.113.4','https://www.google.com/search?q=x');assert.equal(first.status,200);const vid=/bvid=[a-f0-9]{32}/.exec(first.headers.get('set-cookie')||'')?.[0];assert.ok(vid,'子站转发访客 Cookie');
+ assert.equal((await view('203.0.113.4','https://mirror.example.com/',`blog_session=x; ${vid}`)).status,200);
+ assert.equal((await fetch(`${replicaUrl}/api/public/pageview`)).status,404);
+ const views=db.prepare("SELECT site_id,source_type,source,visitor FROM visit_events WHERE path='/archives/a' ORDER BY id").all();
+ assert.deepEqual(views.map(v=>[v.site_id,v.source_type,v.source]),[[state.id,'search','Google'],[state.id,'internal','']]);assert.equal(views[0].visitor,views[1].visitor);
+ const report=(await adminApi('GET',`/api/analytics?site=${state.id}&days=1`)).json();
+ assert.equal(report.sites.find(s=>s.id===state.id).windows[1].visitors,1);assert.equal(report.sites.find(s=>s.id==='').windows[1].pageviews,0);assert.equal(report.summary.pageviews,2);assert.deepEqual(report.sources.map(s=>s.source),['Google']);
+ const forgedView=await app.inject({method:'POST',url:'/api/public/pageview',headers:{authorization:`Replica ${state.id}.forged-token-forged-token-forged`},payload:{path:'/'}});assert.equal(forgedView.statusCode,401);
  const forged=await app.inject({method:'POST',url:`/api/public/documents/${state.a.id}/like`,headers:{authorization:`Replica ${state.id}.forged-token-forged-token-forged`,'x-replica-client-ip':'198.51.100.9'}});assert.equal(forged.statusCode,401);
 });
 
@@ -170,5 +180,6 @@ test('子站公开代理不转发后台 Cookie，也不接受上游设置后台 
  const response=await fetch(url+'/api/public/documents/test/like',{method:'POST',headers:{cookie:'blog_session=private; visit_abcdef123456=1; other=secret'}});
  assert.equal(response.status,200);assert.equal(sent.cookie,'visit_abcdef123456=1');assert.equal(response.headers.get('set-cookie'),null);
  assert.equal((await fetch(url+'/api/public/arbitrary',{method:'POST'})).status,404);
+ const id='0123456789abcdef0123456789abcdef';await fetch(url+'/api/public/pageview',{method:'POST',headers:{cookie:`blog_session=private; bvid=${id}; other=secret`},body:'{}'});assert.equal(sent.cookie,`bvid=${id}`);
  }finally{await new Promise(r=>server.close(r))}
 });

@@ -1,5 +1,5 @@
 // Lightweight replica site. No npm dependencies, no database, no admin: serves the static build pulled from the primary,
-// public media, and forwards comment / visit / like requests to the primary with the replica credential.
+// public media, and forwards comment / visit / like / page-view requests to the primary with the replica credential.
 import http from 'node:http';import fs from 'node:fs';import fsp from 'node:fs/promises';import path from 'node:path';import {fileURLToPath} from 'node:url';
 import {currentRelease} from '../server/replica-protocol.mjs';import {createAgent} from './agent.mjs';
 
@@ -11,7 +11,7 @@ export function createReplicaServer({dataDir,agent,revision=null,trustProxy=fals
  const isFile=async f=>{try{return (await fsp.stat(f)).isFile()}catch{return false}};
  const inside=(root,relative)=>{const file=path.resolve(root,relative);return file.startsWith(path.resolve(root)+path.sep)?file:null};
  function sendFile(req,res,file,status,cache){const stream=fs.createReadStream(file);stream.on('error',()=>res.destroy());res.writeHead(status,{'content-type':types[path.extname(file).toLowerCase()]||'application/octet-stream','cache-control':cache});if(req.method==='HEAD'){stream.destroy();return res.end()}stream.pipe(res)}
- const interactionCookie=value=>String(value||'').split(';').map(s=>s.trim()).filter(s=>/^(?:visit|like)_[a-f0-9]{12}=1$/.test(s)).join('; ');
+ const interactionCookie=value=>String(value||'').split(';').map(s=>s.trim()).filter(s=>/^(?:(?:visit|like)_[a-f0-9]{12}=1|bvid=[a-f0-9]{32})$/.test(s)).join('; ');
  const clientIp=req=>{if(trustProxy){const forwarded=String(req.headers['x-forwarded-for']||'').split(',')[0].trim();if(forwarded)return forwarded}return req.socket.remoteAddress||''};
  async function proxy(req,res,creds,route){
   // Same-origin check for browser writes, mirroring the primary's Origin rule.
@@ -21,7 +21,7 @@ export function createReplicaServer({dataDir,agent,revision=null,trustProxy=fals
   const cookiesIn=interactionCookie(req.headers.cookie);if(cookiesIn)headers.cookie=cookiesIn;
   for(const h of ['content-type','user-agent','accept'])if(req.headers[h])headers[h]=req.headers[h];
   let upstream;try{upstream=await fetchImpl(creds.primaryUrl+route,{method:req.method,headers,body:chunks.length?Buffer.concat(chunks):undefined,redirect:'manual',signal:AbortSignal.timeout(10000)})}catch{return json(res,502,{message:'暂时无法连接主站，请稍后重试'})}
-  const out={'content-type':upstream.headers.get('content-type')||'application/json; charset=utf-8','cache-control':'no-store'};const cookies=(upstream.headers.getSetCookie?.()||[]).filter(s=>/^(?:visit|like)_[a-f0-9]{12}=1;/.test(s));if(cookies.length)out['set-cookie']=cookies;
+  const out={'content-type':upstream.headers.get('content-type')||'application/json; charset=utf-8','cache-control':'no-store'};const cookies=(upstream.headers.getSetCookie?.()||[]).filter(s=>/^(?:(?:visit|like)_[a-f0-9]{12}=1|bvid=[a-f0-9]{32});/.test(s));if(cookies.length)out['set-cookie']=cookies;
   res.writeHead(upstream.status,out);res.end(Buffer.from(await upstream.arrayBuffer()));
  }
  async function handle(req,res){
@@ -30,7 +30,7 @@ export function createReplicaServer({dataDir,agent,revision=null,trustProxy=fals
   if(route.includes('\0')||route.includes('\\')||route.split('/').some(s=>s.startsWith('.')))return json(res,404,{message:'页面不存在'});
   const creds=await agent.credentials().catch(()=>null);
   if(route==='/api/health')return json(res,200,{ok:true,role:'replica',revision,release:await currentRelease(dataDir),enrolled:Boolean(creds),publishing:0,writes:0});
-  if(route.startsWith('/api/public/')){if(!/^\/api\/public\/documents\/[a-zA-Z0-9-]+\/(comments|visit|like)$/.test(route)||!['GET','POST','HEAD'].includes(req.method))return json(res,404,{message:'接口不存在'});if(!creds)return json(res,503,{message:'子站尚未接入主站'});return proxy(req,res,creds,url.pathname+url.search)}
+  if(route.startsWith('/api/public/')){if(!(/^\/api\/public\/documents\/[a-zA-Z0-9-]+\/(comments|visit|like)$/.test(route)||route==='/api/public/pageview'&&req.method==='POST')||!['GET','POST','HEAD'].includes(req.method))return json(res,404,{message:'接口不存在'});if(!creds)return json(res,503,{message:'子站尚未接入主站'});return proxy(req,res,creds,url.pathname+url.search)}
   if(route==='/api'||route.startsWith('/api/'))return json(res,404,{message:'接口不存在'});
   if(route==='/admin'||route.startsWith('/admin/')){if(!creds)return json(res,404,{message:'页面不存在'});res.writeHead(302,{location:creds.primaryUrl+'/admin/','cache-control':'no-store'});return res.end()}
   if(req.method!=='GET'&&req.method!=='HEAD')return json(res,405,{message:'子站只提供浏览'});

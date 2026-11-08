@@ -107,3 +107,13 @@
 :root[data-skin=kiln] .tabbar .tabbar-write svg{background:#d9795c}
 :root[data-skin=kiln] .tabbar .tabbar-write span{color:#e4a08b}
 :root[data-skin=kiln] .tabbar-dot{background:#d399a2}}
+:root[data-skin=kiln] .analytics-sites tbody th button{color:#e9e6e2}
+:root[data-skin=kiln] .analytics-sites td strong{color:#e9e6e2}
+:root[data-skin=kiln] .trend-readout{color:#c0bbb5}
+:root[data-skin=kiln] .trend-readout strong{color:#e9e6e2}
+:root[data-skin=kiln] .trend-plot{border-bottom:1px solid #f4e8dc1f;background:repeating-linear-gradient(to top,transparent 0 44px,#f4e8dc08 44px 45px)}
+:root[data-skin=kiln] .trend-col.active{background:#f4e8dc08}
+:root[data-skin=kiln] .bar-list-label{color:#e9e6e2}
+:root[data-skin=kiln] .bar-list-value{color:#c0bbb5}
+:root[data-skin=kiln] .bar-list-value strong{color:#e9e6e2}
+:root[data-skin=kiln] .bar-list-track{background:#f4e8dc0a}

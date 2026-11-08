@@ -42,8 +42,10 @@ data/                         DATA_DIR，可配置；不是网站公开根目录
 | jobs | id PK, status, created_at, finished_at, log, urls | queued/running/success/failed；urls 是 JSON 字符串 |
 | comment_sources | id PK, data | Halo 原评论来源 JSON |
 | redirects | path PK, target | 历史发布路径映射 |
+| visit_events | id INTEGER PK, site_id（主站为空字符串，子站为其 ID）, visitor, path, source_type, source, created_at（毫秒） | 访客统计明细；索引 site_id/created_at 与 created_at；保留 120 天，写入时每小时最多清理一次 |
+| analytics_schema_migrations | version PK, applied_at | 访客统计迁移账本，当前版本 1 |
 
-日期通常为 ISO 字符串，前台日期显示使用 Asia/Shanghai。WAL 和外键在连接初始化时启用。当前没有 schema_version 或迁移工具，`CREATE TABLE IF NOT EXISTS` 不会升级旧表。新增列/约束时要设计幂等迁移、旧数据转换、备份和兼容回退。
+日期通常为 ISO 字符串，前台日期显示使用 Asia/Shanghai。WAL 和外键在连接初始化时启用。原始博客表没有 schema_version（子站与访客统计各有独立迁移账本，见下文），`CREATE TABLE IF NOT EXISTS` 不会升级旧表。新增列/约束时要设计幂等迁移、旧数据转换、备份和兼容回退。
 
 ## 文档 JSON 和状态
 
@@ -124,6 +126,14 @@ ZIP 中 MD 与 images 目录一起上传，内联 Markdown 相对图片/链接�
 公开产物只使用公开已发布内容，剥离 source。私密正文和删除内容仍保存在数据库与完整备份；媒体 URL 本身没有权限隔离，知道链接即可访问，即便仅在私密文章引用。
 
 完整备份包括整个 SQLite（含会话、账户、任务等所有表）和 media；manifest 中的列表不是数据库裁剪范围。数据库在线备份是一致快照，但媒体遍历与数据库快照不是全局同一时刻的事务。高可靠备份可在维护窗口暂停写入，并执行恢复验证。内容导出只含当前草稿与设置，不含完整历史、媒体字节和账户，不能替代完整备份。
+
+## 访客统计数据与迁移
+
+[analytics.mjs](../server/analytics.mjs) 的 `migrateAnalyticsSchema` 在启动时于事务中执行：使用独立的 `analytics_schema_migrations` 账本（不复用子站迁移版本，避免旧程序因版本号升高拒绝启动），版本 1 新建 `visit_events` 及索引，不修改任何已有表。账本缺失但已有同名 `visit_events` 时报错回滚，不自动覆盖；账本版本高于程序时拒绝启动。
+
+- 隐私：不保存 IP、UA、完整来源 URL 或查询串。visitor 为随机 `bvid` Cookie 的 SHA-256 截断值；浏览器不接受 Cookie 时退化为“当日 + IP + UA”的哈希（每日变化，跨天会重复计数）。来源只存分类和名称/域名；path 去掉查询和锚点。数据只经管理员接口读取，不进入公开快照。
+- 计数口径：页面加载一次计一次浏览（JS 执行才记录，爬虫 UA 忽略，不是防作弊统计）；访客为窗口内去重 visitor；进站次数排除站内跳转。与文章 `stats.visits`（1 小时 Cookie 去重的文章计数）是两套独立数据。
+- 升级：按现有流程完整备份并验证；启动后检查 `SELECT * FROM analytics_schema_migrations`、`PRAGMA integrity_check`。回退：旧程序忽略这两张表，直接回退代码即可；如需清除统计，在备份与停写条件下由维护者 `DROP TABLE visit_events; DROP TABLE analytics_schema_migrations;`，不要用旧整库覆盖新文章。
 
 ## 子站数据与迁移
 

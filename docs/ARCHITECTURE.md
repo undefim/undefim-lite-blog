@@ -67,7 +67,7 @@ flowchart LR
 | `src/lib/content.mjs` | 构建快照读取、公开文章排序、摘要、正文转换、友链特殊渲染与资源映射 |
 | `src/pages/` | 静态路由和索引，见下表 |
 | `admin/src/main.tsx` | API 客户端和后台状态；App、Login、Editor、JobRows、Media、Comments、Taxonomy、SiteSettings、Account |
-| `admin/src/style.css` | 后台分组侧栏（创作/站点/系统，待审评论、发布失败、子站异常角标）、概览待处理、列表分段筛选、站点设置标签页、手机底部导航与抽屉、表单与编辑器布局 |
+| `admin/src/style.css` | 后台分组侧栏（创作/站点〔含访客〕/系统，待审评论、发布失败、子站异常角标）、概览待处理、列表分段筛选、站点设置标签页、手机底部导航与抽屉、表单与编辑器布局 |
 | `admin/vite.config.ts` | `/admin/` 基路径、开发代理、`dist/admin` 输出 |
 | `server/index.mjs` | API 注册、Zod schema、鉴权接入、响应头、静态分发与错误处理 |
 | `server/db.mjs` | 建表、默认设置、草稿与版本读写、公开内容导出、路径验证 |
@@ -77,6 +77,7 @@ flowchart LR
 | `server/uploads.mjs` | 上传限额、ZIP 路径检查、媒体保存、相对资源引用改写 |
 | `server/publish.mjs` | 构建队列、快照、release、发布状态、旧链接页、可选 CDN 清除 |
 | `server/backup.mjs` | 数据库在线备份、媒体和清单打 ZIP |
+| `server/analytics.mjs`、`admin/src/Analytics.tsx` | 访客统计：独立迁移、来源分类、记录与按站点/窗口汇总；后台“访客”页（站点对比表、时间范围、趋势柱图、来源与热门页面） |
 | `server/update-source.mjs`、`server/system-update.mjs`、`admin/src/SystemUpdate.tsx` | 共享内置规范开源仓库/main 默认来源、精确 origin 校验；私有更新文件队列、配置/心跳/维护写屏障与后台更新页；来源显示不依赖执行器在线，独立于站点公开 settings |
 | `scripts/update-worker.mjs`、`Dockerfile.updater`、`scripts/updater-entrypoint.sh`、`scripts/verify-compose.sh` | Compose 单执行器、工具镜像与降权入口、flock、GitHub 快进检查、隔离构建、备份/切换/回退与真实容器烟测 |
 | `scripts/import-halo.mjs` | 一次性 Halo 导入，拒绝已有文章数据库 |

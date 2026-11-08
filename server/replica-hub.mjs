@@ -46,15 +46,16 @@ function replicaFromAuth(req){
 const replicaAuth=async req=>{req.replica=replicaFromAuth(req);if(!req.replica)throw fail(401,'子站凭据无效或已被吊销')};
 function sendFile(reply,file){const stream=fs.createReadStream(file);return reply.header('Cache-Control','no-store').type('application/octet-stream').send(stream)}
 
-// Comment / visit / like requests forwarded by a replica: trust its reported reader IP for rate limiting only when
+// Comment / visit / like / page-view requests forwarded by a replica: trust its reported reader IP for rate limiting only when
 // the replica credential is valid. Requests without the header are ordinary public requests.
 export function replicaClientHook(){
  return async req=>{
   if(!req.url.startsWith('/api/public/')||!req.headers.authorization)return;
   const r=replicaFromAuth(req);if(!r)throw fail(401,'子站凭据无效或已被吊销');
+  const ip=String(req.headers['x-replica-client-ip']||'');req.replicaClientIp=net.isIP(ip)?ip:null;req.replicaSite=r;
+  if(/^\/api\/public\/pageview(?:\?|$)/.test(req.url))return;
   const match=/^\/api\/public\/documents\/([a-zA-Z0-9-]+)\/(comments|visit|like)(?:\?|$)/.exec(req.url);if(!match)throw fail(404,'接口不存在');
   const doc=document(match[1],true);const ids=replicaDocumentIds(r.id);if(!doc||doc.kind==='post'&&(r.mode==='selected'?!ids.includes(doc.id):ids.includes(doc.id)))throw fail(404,'文章不存在');
-  const ip=String(req.headers['x-replica-client-ip']||'');req.replicaClientIp=net.isIP(ip)?ip:null;
  };
 }
 

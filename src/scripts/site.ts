@@ -58,9 +58,20 @@ function routerHooks(){
  document.addEventListener('astro:page-load',finish);
 }
 
+// One page view per loaded page, including client-router navigations. Only the landing page carries the external
+// referrer and utm_source; later views report the previous in-site page so they count as internal traffic.
+let lastPage='';
+function trackPageview(){
+ const landing=!lastPage,referrer=landing?document.referrer:lastPage;lastPage=location.href;
+ let path=location.pathname;try{path=decodeURI(path)}catch{}
+ const campaign=landing?new URLSearchParams(location.search).get('utm_source')||'':'';
+ fetch('/api/public/pageview',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path,referrer,campaign}),keepalive:true,credentials:'same-origin'}).catch(()=>{});
+}
+
 // Everything below lives inside the swapped page and is wired for each page.
 function page(){
  updateThemeButton();
+ trackPageview();
  document.querySelectorAll<HTMLButtonElement>('[data-copy]').forEach(b=>b.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(b.closest('.code-block')!.querySelector('code')!.textContent||'');b.textContent='已复制'}catch{b.textContent='请选中代码复制'}}));
  $('.share-button')?.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(location.href);$('.share-button')!.textContent='链接已复制'}catch{$('.share-button')!.textContent='请复制地址栏链接'}});
  document.querySelectorAll<HTMLImageElement>('.prose img').forEach(img=>img.addEventListener('click',()=>{const dialog=document.createElement('dialog');dialog.className='lightbox';const full=document.createElement('img');full.src=img.src;full.alt=img.alt;const close=document.createElement('button');close.textContent='关闭';close.onclick=()=>dialog.close();dialog.append(full,close);dialog.addEventListener('click',e=>{if(e.target===dialog)dialog.close()});dialog.addEventListener('close',()=>dialog.remove());document.body.append(dialog);dialog.showModal()}));
