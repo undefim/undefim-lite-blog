@@ -27,11 +27,11 @@ JSON 请求使用 `Content-Type: application/json`；文件用 multipart/form-da
 | POST | `/api/public/documents/:id/comments` | `{author,email?,content,website?}` | `{ok:true}`，待审核；3 次/10 分钟 |
 | POST | `/api/public/documents/:id/visit` | 无正文 | `{visits,likes}`；30 次/分钟，Cookie 1 小时去重 |
 | POST | `/api/public/documents/:id/like` | 无正文 | `{visits,likes}`；10 次/分钟，Cookie 365 天去重 |
-| POST | `/api/public/pageview` | `{path,referrer?,campaign?}`，path 最长 1000、须为站内路径（不能是 `/admin`、`/api`、`//`），referrer 最长 2000，campaign（utm_source）最长 200 | `{ok:true,recorded}`；60 次/分钟；首次访问设置 `bvid` HttpOnly Cookie（Path=/api/public，365 天）；爬虫 UA 返回 recorded=false 不写入；无效路径 400 |
+| POST | `/api/public/pageview` | `{path,referrer?,campaign?,reload?}`，path 最长 1000、须为站内路径（不能是 `/admin`、`/api`、`//`），referrer 最长 2000，campaign（utm_source）最长 200，reload 为布尔值（默认 false） | `{ok:true,recorded}`；60 次/分钟；同一访客 30 分钟内重复浏览同一站点同一路径返回 recorded=false 不写入；首次访问设置 `bvid` HttpOnly Cookie（Path=/api/public，365 天）；爬虫 UA 返回 recorded=false 不写入；无效路径 400 |
 
 评论 author 去首尾空白后 1–60 字符，content 1–5000；email 可省略、空或合法邮箱；website 最长 200，是蜜罐字段，非空时返回成功但不写入。关闭评论返回 403。当前提交接口不接收 parent_id；保留历史回复关系不代表已实现新的嵌套回复功能。限流为进程内实现；Cookie 去重不提供强身份或防作弊保证。
 
-`/api/public/pageview` 由前台 `site.ts` 在每次页面加载（含站内无刷新切换）时调用：落地页带 `document.referrer` 与 utm_source，后续切换只报告上一页，因此归为站内跳转。来源分类在服务端完成（direct/search/social/referral/campaign/internal），只保存来源名称或域名，不保存完整来源 URL、IP 或 UA。子站转发时按子站凭据归属站点。
+`/api/public/pageview` 由前台 `site.ts` 在每次页面加载（含站内无刷新切换）时调用：落地页带 `document.referrer` 与 utm_source，后续切换只报告上一页，因此归为站内跳转。浏览器刷新会保留原 referrer，前台据 Navigation Timing 识别刷新并发送 `reload:true`，服务端将其归为站内跳转，不算新的进站。来源分类在服务端完成（direct/search/social/referral/campaign/internal），只保存来源名称或域名，不保存完整来源 URL、IP 或 UA。子站转发时按子站凭据归属站点。
 
 以下其余接口均需管理员登录；写方法均需 CSRF。
 

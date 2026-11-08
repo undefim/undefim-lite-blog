@@ -98,11 +98,12 @@ test('子站服务只提供浏览，评论经子站转发写入主站并按读�
  assert.equal(db.prepare("SELECT COUNT(*) AS n FROM comments WHERE content LIKE '读者一的评论%' OR content='另一位读者'").get().n,4);
  const like=await fetch(`${replicaUrl}/api/public/documents/${state.a.id}/like`,{method:'POST',headers:{'x-forwarded-for':'203.0.113.3'}});assert.equal(like.status,200);assert.match(like.headers.get('set-cookie')||'',/like_/);
  // Page views forwarded by the replica are attributed to that replica, keep one visitor per cookie and classify sources.
- const view=(ip,referrer,cookie)=>fetch(`${replicaUrl}/api/public/pageview`,{method:'POST',headers:{'content-type':'application/json','user-agent':'Mozilla/5.0 Test',origin:'https://mirror.example.com','x-forwarded-for':ip,...(cookie?{cookie}:{})},body:JSON.stringify({path:'/archives/a',referrer})});
+ const view=(ip,referrer,cookie,page='/archives/a')=>fetch(`${replicaUrl}/api/public/pageview`,{method:'POST',headers:{'content-type':'application/json','user-agent':'Mozilla/5.0 Test',origin:'https://mirror.example.com','x-forwarded-for':ip,...(cookie?{cookie}:{})},body:JSON.stringify({path:page,referrer})});
  const first=await view('203.0.113.4','https://www.google.com/search?q=x');assert.equal(first.status,200);const vid=/bvid=[a-f0-9]{32}/.exec(first.headers.get('set-cookie')||'')?.[0];assert.ok(vid,'子站转发访客 Cookie');
- assert.equal((await view('203.0.113.4','https://mirror.example.com/',`blog_session=x; ${vid}`)).status,200);
+ assert.equal((await (await view('203.0.113.4','https://mirror.example.com/',`blog_session=x; ${vid}`)).json()).recorded,false,'30 分钟内重复浏览同一页不计');
+ assert.equal((await view('203.0.113.4','https://mirror.example.com/archives/a',`blog_session=x; ${vid}`,'/archives/b')).status,200);
  assert.equal((await fetch(`${replicaUrl}/api/public/pageview`)).status,404);
- const views=db.prepare("SELECT site_id,source_type,source,visitor FROM visit_events WHERE path='/archives/a' ORDER BY id").all();
+ const views=db.prepare("SELECT site_id,source_type,source,visitor FROM visit_events WHERE path IN ('/archives/a','/archives/b') ORDER BY id").all();
  assert.deepEqual(views.map(v=>[v.site_id,v.source_type,v.source]),[[state.id,'search','Google'],[state.id,'internal','']]);assert.equal(views[0].visitor,views[1].visitor);
  const report=(await adminApi('GET',`/api/analytics?site=${state.id}&days=1`)).json();
  assert.equal(report.sites.find(s=>s.id===state.id).windows[1].visitors,1);assert.equal(report.sites.find(s=>s.id==='').windows[1].pageviews,0);assert.equal(report.summary.pageviews,2);assert.deepEqual(report.sources.map(s=>s.source),['Google']);

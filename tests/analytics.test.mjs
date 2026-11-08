@@ -1,7 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs/promises';import os from 'node:os';import path from 'node:path';import {DatabaseSync} from 'node:sqlite';
 process.env.DATA_DIR=await fs.mkdtemp(path.join(os.tmpdir(),'undefim-analytics-'));process.env.COOKIE_SECURE='false';
 const {db}=await import('../server/db.mjs');const {passwordHash}=await import('../server/auth.mjs');const {createApp}=await import('../server/index.mjs');
-const {migrateAnalyticsSchema,classifySource,cleanPath,createAnalytics}=await import('../server/analytics.mjs');
+const {migrateAnalyticsSchema,classifySource,cleanPath,createAnalytics,REPEAT_WINDOW_MINUTES}=await import('../server/analytics.mjs');
 
 const app=await createApp();test.after(()=>app.close());
 db.prepare('INSERT INTO users VALUES (?,?)').run('admin',passwordHash('test-password-long-enough'));
@@ -30,6 +30,7 @@ test('来源分类：搜索、社区、外链、推广参数、直接与站内',
  assert.deepEqual(classifySource({referrer:'',siteHosts:hosts}),{type:'direct',source:''});
  assert.deepEqual(classifySource({referrer:'javascript:alert(1)',siteHosts:hosts}),{type:'direct',source:''});
  assert.deepEqual(classifySource({referrer:'https://blog.test/a',siteHosts:['blog.test:443']}),{type:'internal',source:''});
+ assert.deepEqual(classifySource({referrer:'https://www.google.com/',campaign:'x',reload:true,siteHosts:hosts}),{type:'internal',source:''},'刷新不算新的进站');
  assert.equal(cleanPath('/archives/a?x=1#y'),'/archives/a');for(const bad of ['//evil.example','/admin/','/api/x','x','/a\\b'])assert.equal(cleanPath(bad),null,bad);
 });
 
@@ -60,4 +61,22 @@ test('统计接口需要登录，按 1/7/30 天窗口和站点汇总，来源排
  const mainOnly=(await app.inject({url:'/api/analytics?site=main&days=7',headers:admin})).json();assert.equal(mainOnly.summary.pageviews,2);assert.equal(mainOnly.trend.length,7);
  assert.equal((await app.inject({url:'/api/analytics?site=nope&days=7',headers:admin})).statusCode,404);
  assert.equal((await app.inject({url:'/api/analytics?days=2',headers:admin})).statusCode,400);
+});
+
+test('刷新与 30 分钟内重复浏览同一页不重复计数，超时或换页后才计',async()=>{
+ const cookie='bvid=0123456789abcdef0123456789abcdef',count=()=>db.prepare("SELECT COUNT(*) AS n FROM visit_events WHERE path LIKE '/repeat/%'").get().n;
+ const landing=await view({path:'/repeat/a',referrer:'https://www.google.com/'},{cookie});assert.equal(landing.json().recorded,true);
+ for(let i=0;i<5;i++)assert.equal((await view({path:'/repeat/a',referrer:'https://www.google.com/',reload:true},{cookie})).json().recorded,false);
+ assert.equal((await view({path:'/repeat/b',referrer:'http://blog.test/repeat/a'},{cookie})).json().recorded,true);
+ assert.equal((await view({path:'/repeat/a',referrer:'http://blog.test/repeat/b'},{cookie})).json().recorded,false,'来回切换也不重复');
+ assert.equal(count(),2);
+ // A reload of a page not yet recorded (e.g. after the window) is stored as internal traffic, not a search arrival.
+ assert.equal((await view({path:'/repeat/c',referrer:'https://www.google.com/',reload:true},{cookie})).json().recorded,true);
+ assert.equal(db.prepare("SELECT source_type FROM visit_events WHERE path='/repeat/c'").get().source_type,'internal');
+ const a=createAnalytics(db),t=Date.now()+60*86400000;
+ assert.equal(a.record({visitor:'w',path:'/repeat/w',source:{type:'direct'},now:t}),true);
+ assert.equal(a.record({visitor:'w',path:'/repeat/w',source:{type:'direct'},now:t+(REPEAT_WINDOW_MINUTES-1)*60000}),false);
+ assert.equal(a.record({visitor:'w',path:'/repeat/w',source:{type:'direct'},now:t+(REPEAT_WINDOW_MINUTES+1)*60000}),true,'超过窗口再计');
+ assert.equal(a.record({siteId:'other',visitor:'w',path:'/repeat/w',source:{type:'direct'},now:t+(REPEAT_WINDOW_MINUTES+2)*60000}),true,'不同站点分别计');
+ db.prepare("DELETE FROM visit_events WHERE path='/repeat/w'").run();
 });

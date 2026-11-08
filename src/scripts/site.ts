@@ -60,12 +60,14 @@ function routerHooks(){
 
 // One page view per loaded page, including client-router navigations. Only the landing page carries the external
 // referrer and utm_source; later views report the previous in-site page so they count as internal traffic.
+// Browsers keep the original referrer on reload, so a reloaded page is flagged and never counted as a new arrival.
 let lastPage='';
 function trackPageview(){
  const landing=!lastPage,referrer=landing?document.referrer:lastPage;lastPage=location.href;
+ const reload=landing&&(performance.getEntriesByType?.('navigation')[0] as PerformanceNavigationTiming|undefined)?.type==='reload';
  let path=location.pathname;try{path=decodeURI(path)}catch{}
- const campaign=landing?new URLSearchParams(location.search).get('utm_source')||'':'';
- fetch('/api/public/pageview',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path,referrer,campaign}),keepalive:true,credentials:'same-origin'}).catch(()=>{});
+ const campaign=landing&&!reload?new URLSearchParams(location.search).get('utm_source')||'':'';
+ fetch('/api/public/pageview',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path,referrer,campaign,reload}),keepalive:true,credentials:'same-origin'}).catch(()=>{});
 }
 
 // Everything below lives inside the swapped page and is wired for each page.

@@ -132,7 +132,7 @@ ZIP 中 MD 与 images 目录一起上传，内联 Markdown 相对图片/链接�
 [analytics.mjs](../server/analytics.mjs) 的 `migrateAnalyticsSchema` 在启动时于事务中执行：使用独立的 `analytics_schema_migrations` 账本（不复用子站迁移版本，避免旧程序因版本号升高拒绝启动），版本 1 新建 `visit_events` 及索引，不修改任何已有表。账本缺失但已有同名 `visit_events` 时报错回滚，不自动覆盖；账本版本高于程序时拒绝启动。
 
 - 隐私：不保存 IP、UA、完整来源 URL 或查询串。visitor 为随机 `bvid` Cookie 的 SHA-256 截断值；浏览器不接受 Cookie 时退化为“当日 + IP + UA”的哈希（每日变化，跨天会重复计数）。来源只存分类和名称/域名；path 去掉查询和锚点。数据只经管理员接口读取，不进入公开快照。
-- 计数口径：页面加载一次计一次浏览（JS 执行才记录，爬虫 UA 忽略，不是防作弊统计）；访客为窗口内去重 visitor；进站次数排除站内跳转。与文章 `stats.visits`（1 小时 Cookie 去重的文章计数）是两套独立数据。
+- 计数口径：页面加载一次计一次浏览，但同一访客在同一站点 30 分钟内重复浏览同一路径（刷新、来回切换）只计一次（`REPEAT_WINDOW_MINUTES`，按 visitor+path 查询近期记录，利用 site_id/created_at 索引，无结构变化）；刷新归为站内跳转，不计进站与来源。JS 执行才记录，爬虫 UA 忽略，不是防作弊统计；访客为窗口内去重 visitor；进站次数排除站内跳转。与文章 `stats.visits`（1 小时 Cookie 去重的文章计数）是两套独立数据。
 - 升级：按现有流程完整备份并验证；启动后检查 `SELECT * FROM analytics_schema_migrations`、`PRAGMA integrity_check`。回退：旧程序忽略这两张表，直接回退代码即可；如需清除统计，在备份与停写条件下由维护者 `DROP TABLE visit_events; DROP TABLE analytics_schema_migrations;`，不要用旧整库覆盖新文章。
 
 ## 子站数据与迁移

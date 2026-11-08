@@ -5,6 +5,8 @@ import {createHash,randomBytes} from 'node:crypto';
 
 export const ANALYTICS_SCHEMA_VERSION=1;
 export const RETENTION_DAYS=120;
+// The same visitor viewing the same page again within this window (refreshes, back and forth) is one page view.
+export const REPEAT_WINDOW_MINUTES=30;
 export const VISITOR_COOKIE='bvid';
 export const sourceTypes=['direct','search','social','referral','campaign','internal'];
 
@@ -36,7 +38,9 @@ const matches=(host,pattern)=>pattern.includes('.')?host===pattern||host.endsWit
 const clean=(value,max)=>String(value||'').replace(/[\u0000-\u001f<>"'`\\]/g,'').trim().slice(0,max);
 
 // Classify where a page view came from. `siteHosts` are hosts of the site being viewed (same-site navigation is internal).
-export function classifySource({referrer='',campaign='',siteHosts=[]}){
+export function classifySource({referrer='',campaign='',siteHosts=[],reload=false}){
+ // A reload keeps the original referrer in the browser; it is never a new arrival.
+ if(reload)return {type:'internal',source:''};
  const utm=clean(campaign,60).toLowerCase();
  if(utm)return {type:'campaign',source:utm};
  let host='';try{const url=new URL(String(referrer));if(['http:','https:'].includes(url.protocol))host=url.hostname.toLowerCase()}catch{}
@@ -66,9 +70,15 @@ export function cleanPath(value){
 
 export function createAnalytics(db){
  const insert=db.prepare('INSERT INTO visit_events(site_id,visitor,path,source_type,source,created_at) VALUES (?,?,?,?,?,?)');
+ // Uses the (site_id, created_at) index; the window holds only the last few minutes of that site's views.
+ const recent=db.prepare('SELECT 1 FROM visit_events WHERE site_id=? AND created_at>=? AND visitor=? AND path=? LIMIT 1');
  let lastPrune=0;
  function prune(now){if(now-lastPrune<3600*1000)return;lastPrune=now;db.prepare('DELETE FROM visit_events WHERE created_at<?').run(now-RETENTION_DAYS*86400000)}
- function record({siteId='',visitor,path,source,now=Date.now()}){insert.run(siteId,visitor,path,source.type,source.source||'',now);prune(now)}
+ // Returns false when the view repeats one recorded within REPEAT_WINDOW_MINUTES and is therefore not stored.
+ function record({siteId='',visitor,path,source,now=Date.now()}){
+  if(recent.get(siteId,now-REPEAT_WINDOW_MINUTES*60000,visitor,path))return false;
+  insert.run(siteId,visitor,path,source.type,source.source||'',now);prune(now);return true;
+ }
 
  // Rolling windows (last 24 h / 7 d / 30 d) per site, plus the breakdown for one site (or all) and one window.
  function report({siteId=null,days=7,tzOffsetMinutes=0,now=Date.now(),sites=[]}={}){

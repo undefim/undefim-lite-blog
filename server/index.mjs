@@ -65,15 +65,15 @@ export async function createApp({queueBuild=enqueueBuild,systemUpdate=createSyst
  app.post('/api/public/documents/:id/visit',{config:{rateLimit:{max:30,timeWindow:'1 minute'}}},async(req,reply)=>{const d=await publicDoc(req.params.id);const key=`visit_${tokenHash(d.id).slice(0,12)}`;if(!req.cookies[key]){db.prepare('UPDATE stats SET visits=visits+1 WHERE document_id=?').run(d.id);reply.setCookie(key,'1',{httpOnly:true,sameSite:'lax',secure:process.env.COOKIE_SECURE!=='false',path:'/api/public',maxAge:3600})}return db.prepare('SELECT visits,likes FROM stats WHERE document_id=?').get(d.id)});
  // Built-in visitor analytics. Replica-forwarded views carry the replica (req.replicaSite) and the reader's IP.
  const analytics=createAnalytics(db);
- const pageviewSchema=z.object({path:z.string().max(1000),referrer:z.string().max(2000).default(''),campaign:z.string().max(200).default('')});
+ const pageviewSchema=z.object({path:z.string().max(1000),referrer:z.string().max(2000).default(''),campaign:z.string().max(200).default(''),reload:z.boolean().default(false)});
  app.post('/api/public/pageview',{config:{rateLimit:{max:60,timeWindow:'1 minute'}}},async(req,reply)=>{
   const body=pageviewSchema.parse(req.body||{});const ua=String(req.headers['user-agent']||'');
   if(isBot(ua))return {ok:true,recorded:false};
   const page=cleanPath(body.path);if(!page)throw fail(400,'页面路径无效');
   const site=req.replicaSite;const hosts=site?[new URL(site.site_url).host]:[req.headers.host,...[process.env.ADMIN_ORIGIN,process.env.SITE_URL].map(u=>{try{return new URL(u).host}catch{return ''}})].filter(Boolean);
   let cookieId=req.cookies[VISITOR_COOKIE];if(!validVisitorId(cookieId)){cookieId=newVisitorId();reply.setCookie(VISITOR_COOKIE,cookieId,{httpOnly:true,sameSite:'lax',secure:process.env.COOKIE_SECURE!=='false',path:'/api/public',maxAge:365*86400})}
-  analytics.record({siteId:site?.id||'',visitor:visitorKey({cookieId,ip:req.replicaClientIp||req.ip,ua}),path:page,source:classifySource({referrer:body.referrer,campaign:body.campaign,siteHosts:hosts})});
-  return {ok:true,recorded:true};
+  const recorded=analytics.record({siteId:site?.id||'',visitor:visitorKey({cookieId,ip:req.replicaClientIp||req.ip,ua}),path:page,source:classifySource({referrer:body.referrer,campaign:body.campaign,siteHosts:hosts,reload:body.reload})});
+  return {ok:true,recorded};
  });
  app.get('/api/analytics',{preHandler:auth},async req=>{
   const q=z.object({site:z.string().max(64).default('all'),days:z.enum(['1','7','30']).default('7'),tz:z.coerce.number().int().min(-840).max(840).default(0)}).parse(req.query||{});
