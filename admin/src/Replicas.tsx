@@ -13,6 +13,8 @@ const overrideFields:[string,string,'theme'|'input'|'textarea'][]=[['siteTheme',
 const overrideLabel=(key:string)=>key==='navigation'?'顶部导航':overrideFields.find(f=>f[0]===key)?.[1]||key;
 const online=(r:any)=>r.last_seen_at&&Date.now()-Date.parse(r.last_seen_at)<2*60*1000;
 
+// Active replicas whose build failed, that report a sync error, or that stopped checking in.
+export const replicaNeedsAttention=(r:any)=>r.status==='active'&&(r.build_status==='failed'||Boolean(r.reported_error)||Boolean(r.build_id)&&!online(r));
 function syncState(r:any){
  if(r.status!=='active')return {tone:'',text:statusText[r.status]||r.status};
  if(r.build_status==='failed')return {tone:'failed',text:'构建失败'};

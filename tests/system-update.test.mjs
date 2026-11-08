@@ -344,15 +344,15 @@ test('真实初始化按镜像版本重建公开快照，同版本重启不重�
   import fs from 'node:fs/promises';import path from 'node:path';
   const {createApp}=await import('./server/index.mjs');const {createSession}=await import('./server/auth.mjs');const {db,dataDir}=await import('./server/db.mjs');const {settledBuilds}=await import('./server/publish.mjs');
   const app=await createApp();const session=createSession('isolated-test');const headers={cookie:'blog_session='+session.token,'x-csrf-token':session.csrf};
-  const saved=await app.inject({method:'PUT',url:'/api/settings',headers,payload:{siteTheme:'kiln'}});
+  const saved=await app.inject({method:'PUT',url:'/api/settings',headers,payload:{siteTheme:'dream'}});
   const before=JSON.parse(await fs.readFile(path.join(dataDir,'current/content.json'),'utf8')).settings.siteTheme;
   const submitted=await app.inject({method:'POST',url:'/api/build',headers});await settledBuilds();
   const status=db.prepare('SELECT status FROM jobs WHERE id=?').get(submitted.json().job).status;
   const after=JSON.parse(await fs.readFile(path.join(dataDir,'current/content.json'),'utf8')).settings.siteTheme;
   console.log(JSON.stringify({saved:saved.statusCode,before,after,status}));await app.close();
  `],{cwd:process.cwd(),env,timeout:120000});
- assert.deepEqual(JSON.parse(themeFlow.stdout),{saved:200,before:'dream',after:'kiln',status:'success'});
- assert.match(await fs.readFile(path.join(dataDir,'current/site/index.html'),'utf8'),/data-skin="kiln"/);
+ assert.deepEqual(JSON.parse(themeFlow.stdout),{saved:200,before:'kiln',after:'dream',status:'success'});
+ assert.match(await fs.readFile(path.join(dataDir,'current/site/index.html'),'utf8'),/data-skin="dream"/);
  const afterTheme=await fs.readlink(path.join(dataDir,'current'));
  await exec(process.execPath,['scripts/initialize.mjs'],{cwd:process.cwd(),env:{...env,APP_REVISION:'2'.repeat(40)},timeout:120000});
  assert.notEqual(await fs.readlink(path.join(dataDir,'current')),afterTheme);

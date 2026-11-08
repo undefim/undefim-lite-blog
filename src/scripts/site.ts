@@ -3,7 +3,7 @@ import {startBackground} from './background';import {startKiln,kilnPage} from '.
 // drawer, footer, search dialog) keep their listeners, so they are wired once in boot(); everything inside
 // the swapped page (header, main, right column) is wired again by page() on every astro:page-load.
 const $ = <T extends Element=HTMLElement>(selector:string)=>document.querySelector<T>(selector);
-const skin=document.documentElement.dataset.skin||'dream',darkOnly=document.documentElement.hasAttribute('data-dark-only');
+const skin=document.documentElement.dataset.skin||'kiln',darkOnly=document.documentElement.hasAttribute('data-dark-only');
 const reducedMotion=()=>matchMedia('(prefers-reduced-motion: reduce)').matches;
 let userTheme=false;try{userTheme=['dark','light'].includes(localStorage.getItem('blog-theme')||'')}catch{}
 function updateThemeButton(){$('.theme-toggle')?.setAttribute('aria-pressed',String(document.documentElement.dataset.theme==='dark'))}
