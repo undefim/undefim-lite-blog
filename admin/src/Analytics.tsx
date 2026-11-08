@@ -7,6 +7,8 @@ export const sourceTypeText:Record<string,string>={direct:'直接访问',search:
 const n=(value:number)=>value.toLocaleString('zh-CN');
 const pct=(part:number,whole:number)=>whole?`${Math.round(part/whole*1000)/10}%`:'0%';
 const siteKey=(id:string)=>id===''?'main':id;
+let regionNames:Intl.DisplayNames|null=null;try{regionNames=new Intl.DisplayNames(['zh-CN'],{type:'region'})}catch{}
+export const countryName=(code:string)=>{if(!code)return '未知';try{return regionNames?.of(code)||code}catch{return code}};
 
 export default function Analytics({api,notify}:Props){
  const [site,setSite]=useState('all'),[days,setDays]=useState(7),[data,setData]=useState<any>(null),[loading,setLoading]=useState(false),[error,setError]=useState('');
@@ -44,9 +46,15 @@ export default function Analytics({api,notify}:Props){
      {data.sources.length?<BarList rows={data.sources.map((t:any)=>({key:t.type+t.source,label:t.source,tag:sourceTypeText[t.type],value:t.visits,detail:`${n(t.visitors)} 位访客`}))} total={s.entries}/>:<div className="empty">暂无来自其他网站的访问。</div>}
     </section>
    </div>
-   <section className="panel"><div className="panel-title"><h2>热门页面</h2><span className="muted">按浏览量</span></div>
-    {data.pages.length?<BarList rows={data.pages.map((p:any)=>({key:p.path,label:p.path,value:p.pageviews,detail:`${n(p.visitors)} 位访客`}))} total={s.pageviews}/>:<div className="empty">暂无浏览记录。</div>}
-   </section>
+   <div className="overview-columns analytics-columns">
+    <section className="panel"><div className="panel-title"><h2>国家/地区</h2><span className="muted">按访客，依据 IP 判断</span></div>
+     {data.countries.length?<BarList rows={data.countries.map((c:any)=>({key:c.country||'unknown',label:countryName(c.country),tag:c.country||undefined,value:c.visitors,detail:`${n(c.pageviews)} 次浏览`}))} total={data.countries.reduce((a:number,c:any)=>a+c.visitors,0)} unit="位访客"/>:<div className="empty">暂无访客记录。</div>}
+     <p className="muted analytics-note">{data.geoip?.available?<>IP 地理位置数据来自 <a href={data.geoip.source.url} target="_blank" rel="noopener noreferrer">{data.geoip.source.name}</a>（{data.geoip.source.license}），版本 {new Date(data.geoip.build).toLocaleDateString('zh-CN')}。IP 只在本机查询，不保存。</>:'IP 库尚未下载，国家/地区暂记为未知；服务器会自动下载，也可运行 npm run geoip:update。'}</p>
+    </section>
+    <section className="panel"><div className="panel-title"><h2>热门页面</h2><span className="muted">按浏览量</span></div>
+     {data.pages.length?<BarList rows={data.pages.map((p:any)=>({key:p.path,label:p.path,value:p.pageviews,detail:`${n(p.visitors)} 位访客`}))} total={s.pageviews}/>:<div className="empty">暂无浏览记录。</div>}
+    </section>
+   </div>
   </>}
  </>;
 }
@@ -68,9 +76,9 @@ function Trend({trend,hourly}:{trend:any[],hourly:boolean}){
  </div>;
 }
 
-function BarList({rows,total}:{rows:{key:string,label:string,tag?:string,value:number,detail:string}[],total:number}){
+function BarList({rows,total,unit='次'}:{rows:{key:string,label:string,tag?:string,value:number,detail:string}[],total:number,unit?:string}){
  const max=Math.max(1,...rows.map(r=>r.value));
- return <ol className="bar-list">{rows.map(r=><li key={r.key} title={`${r.label}：${n(r.value)} 次，${r.detail}`}>
+ return <ol className="bar-list">{rows.map(r=><li key={r.key} title={`${r.label}：${n(r.value)} ${unit}，${r.detail}`}>
   <div className="bar-list-text"><span className="bar-list-label">{r.label}{r.tag&&<small>{r.tag}</small>}</span><span className="bar-list-value"><strong>{n(r.value)}</strong><small>{pct(r.value,total)}</small></span></div>
   <span className="bar-list-track"><span style={{width:`${r.value/max*100}%`}}/></span>
  </li>)}</ol>;

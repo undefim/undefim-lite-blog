@@ -77,7 +77,7 @@ flowchart LR
 | `server/uploads.mjs` | 上传限额、ZIP 路径检查、媒体保存、相对资源引用改写 |
 | `server/publish.mjs` | 构建队列、快照、release、发布状态、旧链接页、可选 CDN 清除 |
 | `server/backup.mjs` | 数据库在线备份、媒体和清单打 ZIP |
-| `server/analytics.mjs`、`admin/src/Analytics.tsx` | 访客统计：独立迁移、来源分类、记录与按站点/窗口汇总；后台“访客”页（站点对比表、时间范围、趋势柱图、来源与热门页面） |
+| `server/analytics.mjs`、`server/geoip.mjs`、`scripts/update-geoip.mjs`、`admin/src/Analytics.tsx` | 访客统计：独立迁移、来源分类、记录与按站点/窗口汇总；DB-IP 离线国家库的下载、校验、原子替换与查询；后台“访客”页（站点对比表、时间范围、趋势柱图、来源、国家/地区与热门页面） |
 | `server/update-source.mjs`、`server/system-update.mjs`、`admin/src/SystemUpdate.tsx` | 共享内置规范开源仓库/main 默认来源、精确 origin 校验；私有更新文件队列、配置/心跳/维护写屏障与后台更新页；来源显示不依赖执行器在线，独立于站点公开 settings |
 | `scripts/update-worker.mjs`、`Dockerfile.updater`、`scripts/updater-entrypoint.sh`、`scripts/verify-compose.sh` | Compose 单执行器、工具镜像与降权入口、flock、GitHub 快进检查、隔离构建、备份/切换/回退与真实容器烟测 |
 | `scripts/import-halo.mjs` | 一次性 Halo 导入，拒绝已有文章数据库 |

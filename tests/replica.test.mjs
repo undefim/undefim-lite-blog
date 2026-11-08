@@ -13,7 +13,7 @@ async function publish(changes){const id=randomUUID();db.prepare('INSERT INTO jo
 async function allText(root){let out='';for(const entry of await fs.readdir(root,{withFileTypes:true,recursive:true}))if(entry.isFile())out+=await fs.readFile(path.join(entry.parentPath,entry.name),'utf8');return out}
 const exists=f=>fs.access(f).then(()=>true,()=>false);
 
-const app=await createApp();await app.listen({port:0,host:'127.0.0.1'});const primaryUrl=`http://127.0.0.1:${app.server.address().port}`;
+const geoLookups=[];const app=await createApp({geoip:{load:async()=>true,country:ip=>{geoLookups.push(ip);return ip==='203.0.113.4'?'DE':''},status:()=>({available:true})}});await app.listen({port:0,host:'127.0.0.1'});const primaryUrl=`http://127.0.0.1:${app.server.address().port}`;
 db.prepare('INSERT INTO users VALUES (?,?)').run('admin',passwordHash('test-password-long-enough'));
 const login=await app.inject({method:'POST',url:'/api/auth/login',payload:{username:'admin',password:'test-password-long-enough'}});
 const admin={cookie:login.headers['set-cookie'].split(';')[0],'x-csrf-token':login.json().csrf};
@@ -104,7 +104,7 @@ test('子站服务只提供浏览，评论经子站转发写入主站并按读�
  assert.equal((await view('203.0.113.4','https://mirror.example.com/archives/a',`blog_session=x; ${vid}`,'/archives/b')).status,200);
  assert.equal((await fetch(`${replicaUrl}/api/public/pageview`)).status,404);
  const views=db.prepare("SELECT site_id,source_type,source,visitor FROM visit_events WHERE path IN ('/archives/a','/archives/b') ORDER BY id").all();
- assert.deepEqual(views.map(v=>[v.site_id,v.source_type,v.source]),[[state.id,'search','Google'],[state.id,'internal','']]);assert.equal(views[0].visitor,views[1].visitor);
+ assert.deepEqual(views.map(v=>[v.site_id,v.source_type,v.source]),[[state.id,'search','Google'],[state.id,'internal','']]);assert.ok(geoLookups.includes('203.0.113.4'),'按读者 IP 而非子站服务器 IP 判断国家');assert.equal(db.prepare("SELECT country FROM visit_events WHERE path='/archives/a'").get().country,'DE');assert.equal(views[0].visitor,views[1].visitor);
  const report=(await adminApi('GET',`/api/analytics?site=${state.id}&days=1`)).json();
  assert.equal(report.sites.find(s=>s.id===state.id).windows[1].visitors,1);assert.equal(report.sites.find(s=>s.id==='').windows[1].pageviews,0);assert.equal(report.summary.pageviews,2);assert.deepEqual(report.sources.map(s=>s.source),['Google']);
  const forgedView=await app.inject({method:'POST',url:'/api/public/pageview',headers:{authorization:`Replica ${state.id}.forged-token-forged-token-forged`},payload:{path:'/'}});assert.equal(forgedView.statusCode,401);
