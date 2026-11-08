@@ -3,7 +3,7 @@ import path from 'node:path';import fs from 'node:fs/promises';import {randomUUI
 import {db,dataDir,documents,document,saveDocument,trash,settings,setSettings,defaultSettings,validContentPath} from './db.mjs';
 import {passwordHash,verifyPassword,createSession,session,tokenHash} from './auth.mjs';import {renderMarkdown,safeHtml} from './markdown.mjs';
 import {enqueueBuild,activeContent} from './publish.mjs';import {markdownUpload,storeMedia} from './uploads.mjs';import {createBackup} from './backup.mjs';
-import {registerReplicaRoutes,replicaClientHook} from './replica-hub.mjs';import {reconcileReplicaBuilds} from './replica-build.mjs';import {defaultLicense} from './license.mjs';import {siteThemes} from './themes.mjs';import {createSystemUpdate} from './system-update.mjs';import {publishingCount} from './publish.mjs';
+import {registerReplicaRoutes,replicaClientHook} from './replica-hub.mjs';import {reconcileReplicaBuilds} from './replica-build.mjs';import {defaultLicense} from './license.mjs';import {siteThemes} from './themes.mjs';import {createSystemUpdate} from './system-update.mjs';import {publishingCount} from './publish.mjs';import {createAnalytics,classifySource,cleanPath,isBot,visitorKey,validVisitorId,newVisitorId,VISITOR_COOKIE} from './analytics.mjs';
 const date=z.string().refine(s=>!Number.isNaN(Date.parse(s)),'日期无效');
 const url=z.string().max(2000).regex(/^[^<>\"'\\\u0000-\u001f]*$/,'地址含无效字符').refine(s=>!s||s.startsWith('/')&&!s.startsWith('//')||/^https?:\/\//.test(s),'请使用站内路径或 HTTP 地址');
 const docSchema=z.object({kind:z.enum(['post','page']),title:z.string().trim().min(1).max(500),path:z.string().refine(validContentPath,'固定链接无效'),format:z.enum(['markdown','html']),markdown:z.string().max(2000000),date,modifiedAt:date.optional(),categories:z.array(z.string().max(100)).max(20).default([]),tags:z.array(z.string().max(100)).max(50).default([]),excerpt:z.string().max(2000).default(''),cover:url.default(''),pinned:z.boolean().default(false),allowComment:z.boolean().default(true),visibility:z.enum(['public','private']).default('public'),author:z.string().max(100).default('undefim'),copyrightEnabled:z.boolean().default(defaultLicense.copyrightEnabled),licenseName:z.string().trim().min(1).max(100).default(defaultLicense.licenseName),licenseUrl:url.default(defaultLicense.licenseUrl),licenseNote:z.string().trim().max(1000).default(defaultLicense.licenseNote)});
@@ -63,6 +63,25 @@ export async function createApp({queueBuild=enqueueBuild,systemUpdate=createSyst
  app.get('/api/public/documents/:id/comments',async req=>{await publicDoc(req.params.id);return db.prepare("SELECT id,author,content,created_at,parent_id FROM comments WHERE document_id=? AND status='approved' ORDER BY created_at").all(req.params.id)});
  app.post('/api/public/documents/:id/comments',{config:{rateLimit:{max:3,timeWindow:'10 minutes'}}},async req=>{const d=await publicDoc(req.params.id);if(!d.allowComment)throw fail(403,'此文章已关闭评论');const c=z.object({author:z.string().trim().min(1).max(60),email:z.union([z.literal(''),z.email()]).optional(),content:z.string().trim().min(1).max(5000),website:z.string().max(200).optional()}).parse(req.body);if(c.website)return {ok:true};db.prepare('INSERT INTO comments VALUES (?,?,?,?,?,?,?,?)').run(randomUUID(),d.id,null,c.author,c.email||null,c.content,'pending',new Date().toISOString());return {ok:true}});
  app.post('/api/public/documents/:id/visit',{config:{rateLimit:{max:30,timeWindow:'1 minute'}}},async(req,reply)=>{const d=await publicDoc(req.params.id);const key=`visit_${tokenHash(d.id).slice(0,12)}`;if(!req.cookies[key]){db.prepare('UPDATE stats SET visits=visits+1 WHERE document_id=?').run(d.id);reply.setCookie(key,'1',{httpOnly:true,sameSite:'lax',secure:process.env.COOKIE_SECURE!=='false',path:'/api/public',maxAge:3600})}return db.prepare('SELECT visits,likes FROM stats WHERE document_id=?').get(d.id)});
+ // Built-in visitor analytics. Replica-forwarded views carry the replica (req.replicaSite) and the reader's IP.
+ const analytics=createAnalytics(db);
+ const pageviewSchema=z.object({path:z.string().max(1000),referrer:z.string().max(2000).default(''),campaign:z.string().max(200).default(''),reload:z.boolean().default(false)});
+ app.post('/api/public/pageview',{config:{rateLimit:{max:60,timeWindow:'1 minute'}}},async(req,reply)=>{
+  const body=pageviewSchema.parse(req.body||{});const ua=String(req.headers['user-agent']||'');
+  if(isBot(ua))return {ok:true,recorded:false};
+  const page=cleanPath(body.path);if(!page)throw fail(400,'页面路径无效');
+  const site=req.replicaSite;const hosts=site?[new URL(site.site_url).host]:[req.headers.host,...[process.env.ADMIN_ORIGIN,process.env.SITE_URL].map(u=>{try{return new URL(u).host}catch{return ''}})].filter(Boolean);
+  let cookieId=req.cookies[VISITOR_COOKIE];if(!validVisitorId(cookieId)){cookieId=newVisitorId();reply.setCookie(VISITOR_COOKIE,cookieId,{httpOnly:true,sameSite:'lax',secure:process.env.COOKIE_SECURE!=='false',path:'/api/public',maxAge:365*86400})}
+  const recorded=analytics.record({siteId:site?.id||'',visitor:visitorKey({cookieId,ip:req.replicaClientIp||req.ip,ua}),path:page,source:classifySource({referrer:body.referrer,campaign:body.campaign,siteHosts:hosts,reload:body.reload})});
+  return {ok:true,recorded};
+ });
+ app.get('/api/analytics',{preHandler:auth},async req=>{
+  const q=z.object({site:z.string().max(64).default('all'),days:z.enum(['1','7','30']).default('7'),tz:z.coerce.number().int().min(-840).max(840).default(0)}).parse(req.query||{});
+  const sites=[{id:'',name:'主站',url:'',status:'primary'},...db.prepare('SELECT id,name,site_url AS url,status FROM replica_sites ORDER BY created_at').all()];
+  const siteId=q.site==='all'?null:q.site==='main'?'':q.site;
+  if(siteId&&!sites.some(s=>s.id===siteId)&&!db.prepare('SELECT 1 FROM visit_events WHERE site_id=? LIMIT 1').get(siteId))throw fail(404,'站点不存在');
+  return analytics.report({siteId,days:Number(q.days),tzOffsetMinutes:q.tz,sites});
+ });
  app.post('/api/public/documents/:id/like',{config:{rateLimit:{max:10,timeWindow:'1 minute'}}},async(req,reply)=>{const d=await publicDoc(req.params.id);const key=`like_${tokenHash(d.id).slice(0,12)}`;if(!req.cookies[key]){db.prepare('UPDATE stats SET likes=likes+1 WHERE document_id=?').run(d.id);reply.setCookie(key,'1',{httpOnly:true,sameSite:'lax',secure:process.env.COOKIE_SECURE!=='false',path:'/api/public',maxAge:365*86400})}return db.prepare('SELECT visits,likes FROM stats WHERE document_id=?').get(d.id)});
  app.get('/*',async(req,reply)=>{
   const route='/'+(req.params['*']||'');if(route.split('/').some(s=>s.startsWith('.')||s.includes('\\')||s.includes('\0')))throw fail(404,'页面不存在');

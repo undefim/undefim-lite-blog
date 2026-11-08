@@ -1,5 +1,21 @@
 # 开发维护记录
 
+## 2026-11-08：访客统计刷新与重复浏览不再累计
+
+- 问题：刷新时浏览器保留原 referrer，从搜索进入后每次刷新都会再计一次“搜索引擎”进站；浏览量随刷新无限增加。
+- 修改：`site.ts` 用 Navigation Timing 识别落地页刷新并上报 `reload:true`（刷新时不再带 utm_source）；`classifySource` 把刷新归为站内跳转；`createAnalytics().record` 对同一站点、同一访客、同一路径 30 分钟内的重复浏览不写入并返回 false，接口返回 `recorded:false`。访客数口径不变；已有数据不改写；无数据库结构变化。
+- 验证：`npm test` 67 项 66 通过、0 失败、1 项 Linux 专用测试跳过（新增刷新/来回切换/超时再计/分站点测试，子站测试改为验证重复浏览不计）；`npm run check`、前后台构建通过。隔离 `data-analytics-qa` 浏览器实测：Navigation Timing 返回 reload，两次刷新、站内跳转再后退共 5 次上报，仅新页面 `/you-lian` 写入 1 条站内记录。
+- 未验证：Safari/真机未测；未部署，上线后需重新发布静态站点并重建子站。
+
+## 2026-11-08：内置访客统计（主站/子站分别统计，含来源）
+
+- 需求：记录访客并显示来源；后台分别查看主站与各子站近 1/7/30 天的访问人数与来源。
+- 实现：新增 `server/analytics.mjs`（独立迁移、来源分类、记录与汇总）、公开接口 `POST /api/public/pageview`、管理接口 `GET /api/analytics`、后台“站点 / 访客”页 `admin/src/Analytics.tsx`。前台 `site.ts` 每次页面加载（含无刷新切换）上报路径；落地页带 referrer 和 utm_source，之后的切换记为站内跳转。来源分为直接访问、搜索引擎、社交与社区、外部链接、推广参数、站内跳转。子站代理放行 pageview 并转发 `bvid` Cookie，`replicaClientHook` 凭子站凭据把记录归属到该子站。
+- 隐私与口径：不保存 IP、UA 或完整来源 URL；访客为随机 HttpOnly Cookie 的哈希（无 Cookie 时退化为每日变化的哈希），爬虫 UA 忽略；明细保留 120 天。仅统计执行 JS 的浏览，不防刷。与文章计数 `stats.visits` 相互独立，历史访问不会回填。
+- 数据库：独立账本 `analytics_schema_migrations` 版本 1 新增 `visit_events` 及索引，不改已有表；已存在未登记同名表或更高版本时报错回滚。旧程序忽略新表，回退代码即可，详见 DATA-MODEL。
+- 验证：`npm test` 66 项 65 通过、0 失败、1 项 Linux 专用测试跳过（新增 analytics.test.mjs 4 项：迁移幂等与拒绝、来源分类、Cookie 去重/爬虫/路径/Origin/不存 IP、窗口与站点汇总及鉴权；replica.test.mjs 增加真实子站转发归属、Cookie 白名单、伪造凭据 401）；`npm run check` 与前后台构建通过。隔离 `data-analytics-qa`（合成数据）浏览器验证：前台页面加载与站内切换实际写入记录、同一访客 Cookie 稳定；后台访客页窑火主题在 360/390/767/768/1199/1200/1440/1920px 无横向溢出（修复了长来源域名在手机撑宽网格的问题），趋势柱悬停读数正确。
+- 未验证：Dream 后台皮肤未截图（颜色由生成脚本同步）；真实子站 Docker 环境、Safari/真机未测。未提交、未部署；上线后需重新发布主站静态站点并触发子站重新构建，新的 `site.ts` 才会上报访问。
+
 ## 2026-11-08：后台布局按视觉直觉重组，默认主题改为窑火
 
 - 需求：后台布局更符合视觉直觉，默认使用 Claude 风格（窑火 Kiln）；手机侧栏过于突兀。

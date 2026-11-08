@@ -27,8 +27,11 @@ JSON 请求使用 `Content-Type: application/json`；文件用 multipart/form-da
 | POST | `/api/public/documents/:id/comments` | `{author,email?,content,website?}` | `{ok:true}`，待审核；3 次/10 分钟 |
 | POST | `/api/public/documents/:id/visit` | 无正文 | `{visits,likes}`；30 次/分钟，Cookie 1 小时去重 |
 | POST | `/api/public/documents/:id/like` | 无正文 | `{visits,likes}`；10 次/分钟，Cookie 365 天去重 |
+| POST | `/api/public/pageview` | `{path,referrer?,campaign?,reload?}`，path 最长 1000、须为站内路径（不能是 `/admin`、`/api`、`//`），referrer 最长 2000，campaign（utm_source）最长 200，reload 为布尔值（默认 false） | `{ok:true,recorded}`；60 次/分钟；同一访客 30 分钟内重复浏览同一站点同一路径返回 recorded=false 不写入；首次访问设置 `bvid` HttpOnly Cookie（Path=/api/public，365 天）；爬虫 UA 返回 recorded=false 不写入；无效路径 400 |
 
 评论 author 去首尾空白后 1–60 字符，content 1–5000；email 可省略、空或合法邮箱；website 最长 200，是蜜罐字段，非空时返回成功但不写入。关闭评论返回 403。当前提交接口不接收 parent_id；保留历史回复关系不代表已实现新的嵌套回复功能。限流为进程内实现；Cookie 去重不提供强身份或防作弊保证。
+
+`/api/public/pageview` 由前台 `site.ts` 在每次页面加载（含站内无刷新切换）时调用：落地页带 `document.referrer` 与 utm_source，后续切换只报告上一页，因此归为站内跳转。浏览器刷新会保留原 referrer，前台据 Navigation Timing 识别刷新并发送 `reload:true`，服务端将其归为站内跳转，不算新的进站。来源分类在服务端完成（direct/search/social/referral/campaign/internal），只保存来源名称或域名，不保存完整来源 URL、IP 或 UA。子站转发时按子站凭据归属站点。
 
 以下其余接口均需管理员登录；写方法均需 CSRF。
 
@@ -132,6 +135,16 @@ path 必须以 `/` 开始，不可为根；不含 query/hash、反斜线、控�
 | PATCH | `/api/comments/:id` | `{status,content?}` | `{ok:true}`；status approved/pending/hidden，content <=5000 |
 
 导入无更新/覆盖模式，遇到同批或已有路径（含回收站）冲突为 409。Front Matter 仅支持 YAML/JSON 字段对象；不支持的语言/标签、未闭合分隔符、错误格式或过量 YAML 别名展开返回 400，不执行元数据代码。自动发布由设置控制；导入不读取 Front Matter 的私密标记。文件上限、支持格式和相对引用限制见 [数据模型](DATA-MODEL.md)。没有媒体删除接口，不能假设 DELETE `/api/media/:id` 可用。评论修改立即影响动态列表；静态摘要计数需要另行构建。
+
+## 访客统计
+
+| 方法 | 路径 | 查询参数 | 响应 |
+| --- | --- | --- | --- |
+| GET | `/api/analytics` | `site=all\|main\|<子站ID>`（默认 all），`days=1\|7\|30`（默认 7），`tz`=浏览器 `getTimezoneOffset()` 分钟（-840..840，默认 0） | `{generatedAt,retentionDays,days,siteId,sites,totals,summary,types,sources,pages,trend}` |
+
+- 窗口为滚动时间（近 24 小时 / 7×24 / 30×24 小时）。`sites` 为主站（id 为空字符串）、全部子站记录及仍有历史数据的已删除子站（`removed:true`），每项 `windows` 含 1/7/30 天的 `{visitors,pageviews}`；`totals` 为全部站点合计，访客按“站点+访客”去重（不同域名的 Cookie 本就不同）。
+- `summary`：所选站点与窗口的 visitors、pageviews、entries（非站内跳转的进站次数）。`types` 为来源类型（不含 internal），`sources` 为前 20 个来源名称/域名（不含 direct、internal），`pages` 为前 20 个路径；均带 visits/pageviews 与去重访客数。`trend`：1 天时 24 个小时桶，否则按 tz 对应的自然日分桶。
+- 未知站点 404；参数无效 400；未登录 401。只读，无 CSRF 要求。
 
 ## 设置、构建和备份
 
