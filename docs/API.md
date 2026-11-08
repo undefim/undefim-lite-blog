@@ -27,7 +27,7 @@ JSON 请求使用 `Content-Type: application/json`；文件用 multipart/form-da
 | POST | `/api/public/documents/:id/comments` | `{author,email?,content,website?}` | `{ok:true}`，待审核；3 次/10 分钟 |
 | POST | `/api/public/documents/:id/visit` | 无正文 | `{visits,likes}`；30 次/分钟，Cookie 1 小时去重 |
 | POST | `/api/public/documents/:id/like` | 无正文 | `{visits,likes}`；10 次/分钟，Cookie 365 天去重 |
-| POST | `/api/public/pageview` | `{path,referrer?,campaign?,reload?}`，path 最长 1000、须为站内路径（不能是 `/admin`、`/api`、`//`），referrer 最长 2000，campaign（utm_source）最长 200，reload 为布尔值（默认 false） | `{ok:true,recorded}`；60 次/分钟；同一访客 30 分钟内重复浏览同一站点同一路径返回 recorded=false 不写入；首次访问设置 `bvid` HttpOnly Cookie（Path=/api/public，365 天）；爬虫 UA 返回 recorded=false 不写入；无效路径 400 |
+| POST | `/api/public/pageview` | `{path,referrer?,campaign?,reload?}`，path 最长 1000、须为站内路径（不能是 `/admin`、`/api`、`//`），referrer 最长 2000，campaign（utm_source）最长 200，reload 为布尔值（默认 false） | `{ok:true,recorded}`；60 次/分钟；同一访客 30 分钟内重复浏览同一站点同一路径返回 recorded=false 不写入；首次访问设置 `bvid` HttpOnly Cookie（Path=/api/public，365 天）；爬虫 UA 返回 recorded=false 不写入；无效路径 400；主站按读者 IP（子站转发时为 `X-Replica-Client-IP`）离线查询国家代码一并保存，IP 本身不保存 |
 
 评论 author 去首尾空白后 1–60 字符，content 1–5000；email 可省略、空或合法邮箱；website 最长 200，是蜜罐字段，非空时返回成功但不写入。关闭评论返回 403。当前提交接口不接收 parent_id；保留历史回复关系不代表已实现新的嵌套回复功能。限流为进程内实现；Cookie 去重不提供强身份或防作弊保证。
 
@@ -140,10 +140,10 @@ path 必须以 `/` 开始，不可为根；不含 query/hash、反斜线、控�
 
 | 方法 | 路径 | 查询参数 | 响应 |
 | --- | --- | --- | --- |
-| GET | `/api/analytics` | `site=all\|main\|<子站ID>`（默认 all），`days=1\|7\|30`（默认 7），`tz`=浏览器 `getTimezoneOffset()` 分钟（-840..840，默认 0） | `{generatedAt,retentionDays,days,siteId,sites,totals,summary,types,sources,pages,trend}` |
+| GET | `/api/analytics` | `site=all\|main\|<子站ID>`（默认 all），`days=1\|7\|30`（默认 7），`tz`=浏览器 `getTimezoneOffset()` 分钟（-840..840，默认 0） | `{generatedAt,retentionDays,days,siteId,sites,totals,summary,types,sources,countries,pages,trend,geoip}` |
 
 - 窗口为滚动时间（近 24 小时 / 7×24 / 30×24 小时）。`sites` 为主站（id 为空字符串）、全部子站记录及仍有历史数据的已删除子站（`removed:true`），每项 `windows` 含 1/7/30 天的 `{visitors,pageviews}`；`totals` 为全部站点合计，访客按“站点+访客”去重（不同域名的 Cookie 本就不同）。
-- `summary`：所选站点与窗口的 visitors、pageviews、entries（非站内跳转的进站次数）。`types` 为来源类型（不含 internal），`sources` 为前 20 个来源名称/域名（不含 direct、internal），`pages` 为前 20 个路径；均带 visits/pageviews 与去重访客数。`trend`：1 天时 24 个小时桶，否则按 tz 对应的自然日分桶。
+- `summary`：所选站点与窗口的 visitors、pageviews、entries（非站内跳转的进站次数）。`types` 为来源类型（不含 internal），`sources` 为前 20 个来源名称/域名（不含 direct、internal），`pages` 为前 20 个路径；均带 visits/pageviews 与去重访客数。`countries` 为全部国家/地区 `{country,visitors,pageviews}`，按访客排序，country 为 ISO 3166-1 两位代码，空字符串表示未知（私有地址、IP 库缺失或 v2 之前的记录）。`geoip` 为 `{available,build,source:{name,url,license}}`。`trend`：1 天时 24 个小时桶，否则按 tz 对应的自然日分桶。
 - 未知站点 404；参数无效 400；未登录 401。只读，无 CSRF 要求。
 
 ## 设置、构建和备份

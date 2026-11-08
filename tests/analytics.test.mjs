@@ -1,6 +1,8 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs/promises';import os from 'node:os';import path from 'node:path';import {DatabaseSync} from 'node:sqlite';
 process.env.DATA_DIR=await fs.mkdtemp(path.join(os.tmpdir(),'undefim-analytics-'));process.env.COOKIE_SECURE='false';
 const {db}=await import('../server/db.mjs');const {passwordHash}=await import('../server/auth.mjs');const {createApp}=await import('../server/index.mjs');
+import {gzipSync} from 'node:zlib';
+const {createGeoip,openCountryDatabase,geoipUrls}=await import('../server/geoip.mjs');
 const {migrateAnalyticsSchema,classifySource,cleanPath,createAnalytics,REPEAT_WINDOW_MINUTES}=await import('../server/analytics.mjs');
 
 const app=await createApp();test.after(()=>app.close());
@@ -12,9 +14,9 @@ const view=(payload,headers={})=>app.inject({method:'POST',url:'/api/public/page
 
 test('迁移幂等、只新增表，并拒绝更高版本或未登记的同名表',()=>{
  migrateAnalyticsSchema(db);migrateAnalyticsSchema(db);
- assert.deepEqual(db.prepare('SELECT version FROM analytics_schema_migrations').all().map(r=>r.version),[1]);
+ assert.deepEqual(db.prepare('SELECT version FROM analytics_schema_migrations').all().map(r=>r.version),[1,2]);
  assert.equal(db.prepare('PRAGMA integrity_check').get().integrity_check,'ok');
- const future=new DatabaseSync(':memory:');migrateAnalyticsSchema(future);future.prepare('INSERT INTO analytics_schema_migrations VALUES (2,?)').run('x');
+ const future=new DatabaseSync(':memory:');migrateAnalyticsSchema(future);future.prepare('INSERT INTO analytics_schema_migrations VALUES (3,?)').run('x');
  assert.throws(()=>migrateAnalyticsSchema(future),/版本高于/);
  const stray=new DatabaseSync(':memory:');stray.exec('CREATE TABLE visit_events (id INTEGER)');
  assert.throws(()=>migrateAnalyticsSchema(stray),/未登记/);assert.equal(stray.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE name='analytics_schema_migrations'").get().n,0,'失败回滚');
@@ -79,4 +81,53 @@ test('刷新与 30 分钟内重复浏览同一页不重复计数，超时或换�
  assert.equal(a.record({visitor:'w',path:'/repeat/w',source:{type:'direct'},now:t+(REPEAT_WINDOW_MINUTES+1)*60000}),true,'超过窗口再计');
  assert.equal(a.record({siteId:'other',visitor:'w',path:'/repeat/w',source:{type:'direct'},now:t+(REPEAT_WINDOW_MINUTES+2)*60000}),true,'不同站点分别计');
  db.prepare("DELETE FROM visit_events WHERE path='/repeat/w'").run();
+});
+
+test('v1 统计库升级到 v2：新增 country 列，保留已有记录且记为未知',()=>{
+ const old=new DatabaseSync(':memory:');
+ old.exec(`CREATE TABLE analytics_schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);INSERT INTO analytics_schema_migrations VALUES (1,'2026-11-08');
+ CREATE TABLE visit_events (id INTEGER PRIMARY KEY AUTOINCREMENT, site_id TEXT NOT NULL DEFAULT '', visitor TEXT NOT NULL, path TEXT NOT NULL, source_type TEXT NOT NULL, source TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL);
+ INSERT INTO visit_events(visitor,path,source_type,created_at) VALUES ('v','/old','direct',1);`);
+ migrateAnalyticsSchema(old);migrateAnalyticsSchema(old);
+ assert.deepEqual(old.prepare('SELECT version FROM analytics_schema_migrations ORDER BY version').all().map(r=>r.version),[1,2]);
+ assert.deepEqual({...old.prepare('SELECT path,country FROM visit_events').get()},{path:'/old',country:''});
+});
+
+test('按 IP 记录国家/地区：只存国家代码，统计接口返回国家分布与 IP 库状态',async()=>{
+ const seen=[];const geoip={load:async()=>true,country:ip=>{seen.push(ip);return ip==='198.51.100.7'?'JP':''},status:()=>({available:true,build:'2026-11-01T00:00:00.000Z',source:{name:'DB-IP',url:'https://db-ip.com',license:'CC BY 4.0'}})};
+ const geoApp=await createApp({geoip});try{
+ const send=(ip,path)=>geoApp.inject({method:'POST',url:'/api/public/pageview',remoteAddress:ip,headers:{'user-agent':ua,host:'blog.test'},payload:{path}});
+ assert.equal((await send('198.51.100.7','/geo/a')).json().recorded,true);assert.equal((await send('192.0.2.9','/geo/b')).json().recorded,true);
+ assert.deepEqual(seen,['198.51.100.7','192.0.2.9']);
+ assert.deepEqual(db.prepare("SELECT path,country FROM visit_events WHERE path LIKE '/geo/%' ORDER BY id").all().map(r=>[r.path,r.country]),[['/geo/a','JP'],['/geo/b','']]);
+ assert.ok(!JSON.stringify(db.prepare("SELECT * FROM visit_events WHERE path LIKE '/geo/%'").all()).includes('198.51.100.7'),'不保存 IP');
+ const r=(await geoApp.inject({url:'/api/analytics?site=main&days=1',headers:admin})).json();
+ assert.equal(r.geoip.available,true);assert.ok(r.countries.some(c=>c.country==='JP'&&c.visitors===1));assert.ok(r.countries.some(c=>c.country===''));
+ }finally{await geoApp.close()}
+ const a=createAnalytics(db);assert.equal(a.record({visitor:'x',path:'/geo/bad',source:{type:'direct'},country:'<script>'}),true);
+ assert.equal(db.prepare("SELECT country FROM visit_events WHERE path='/geo/bad'").get().country,'','非法国家代码记为未知');
+});
+
+test('IP 库下载失败或内容无效时不覆盖现有文件，未下载时查询返回未知',async()=>{
+ const file=path.join(process.env.DATA_DIR,'geoip-test','country.mmdb');const logs=[];
+ const bad=createGeoip({file,log:m=>logs.push(m),fetchImpl:async()=>new Response('not found',{status:404})});
+ await bad.refresh();assert.equal(bad.status().available,false);assert.equal(bad.country('8.8.8.8'),'');assert.ok(logs.some(m=>m.includes('更新失败')));
+ await fs.mkdir(path.dirname(file),{recursive:true});await fs.writeFile(file,'previous');
+ const garbage=createGeoip({file,log:()=>{},fetchImpl:async()=>new Response(gzipSync(Buffer.from('not a database')))});
+ await assert.rejects(garbage.download());assert.equal(await fs.readFile(file,'utf8'),'previous','校验失败不替换');
+ assert.throws(()=>openCountryDatabase(Buffer.from('x')));
+ assert.match(geoipUrls(new Date(Date.UTC(2026,0,15)))[1],/dbip-country-lite-2025-12\.mmdb\.gz$/,'跨年回退上月');
+});
+
+test('国家列表不截断，超过 30 个国家的占比仍包含完整数据',()=>{
+ const local=new DatabaseSync(':memory:');migrateAnalyticsSchema(local);const analytics=createAnalytics(local);
+ for(let i=0;i<35;i++)analytics.record({visitor:`country-${i}`,path:'/',country:String.fromCharCode(65+Math.floor(i/26),65+i%26),source:{type:'direct'}});
+ const report=analytics.report({days:1});assert.equal(report.countries.length,35);assert.equal(report.countries.reduce((sum,c)=>sum+c.visitors,0),35);local.close();
+});
+
+test('IP 库流式下载超限时提前终止并保留旧文件',async()=>{
+ const file=path.join(process.env.DATA_DIR,'geoip-size','country.mmdb');await fs.mkdir(path.dirname(file),{recursive:true});await fs.writeFile(file,'previous');
+ let cancelled=0,pulled=0;
+ const geo=createGeoip({file,fetchImpl:async()=>new Response(new ReadableStream({pull(controller){pulled++;controller.enqueue(new Uint8Array(1024*1024));},cancel(){cancelled++}}))});
+ await assert.rejects(geo.download(),/下载文件过大/);assert.equal(cancelled,2,'本月与上月下载都应取消');assert.ok(pulled<140,'不能继续读取无限响应');assert.equal(await fs.readFile(file,'utf8'),'previous');
 });

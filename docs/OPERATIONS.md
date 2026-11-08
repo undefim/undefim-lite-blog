@@ -124,13 +124,19 @@ APP_REVISION=$(git rev-parse HEAD) docker compose up -d --build
 | ADMIN_ORIGIN | 示例 https://blog.example.com | 精确 Origin 校验，无结尾斜杠；空值使用请求协议和 Host |
 | COOKIE_SECURE | 默认 true | 仅独立 HTTP 开发/隧道预览为 false |
 | TRUST_PROXY | 仅字符串 true 启用 | Compose 开启；应用端口必须保持受可信代理保护 |
-| TRACKING_ENABLED | 生产 false | 仅 true 且设置有 umamiWebsiteId 才在构建中加入脚本 |
+| TRACKING_ENABLED | 生产 false | 仅 true 且设置有 umamiWebsiteId 才在构建中加入脚本；与内置访客统计无关 |
+| GEOIP_AUTO_UPDATE | 默认 true（Compose 传入） | 主站启动时及每 24 小时检查 IP 国家库，缺失或超过 32 天即从 download.db-ip.com 下载当月（失败回退上月）；false 时只读取已有文件。需要出站 HTTPS；失败保留旧库并写日志，重启生效 |
+| GEOIP_DB | DATA_DIR/geoip/country.mmdb | IP 国家库路径（私有，不对外提供，不进完整备份，可随时重新下载）；Compose 未传入，一般无需修改 |
 | CLOUDFLARE_ZONE_ID | 未配置 | 可选区域缓存刷新 |
 | CLOUDFLARE_API_TOKEN | 未配置，秘密 | 最小范围区域缓存清除权限；只放受保护环境 |
 | CONTENT_SNAPSHOT | 发布器设置 | 指定本次 content.json，不手工指向含私密正文的全集 |
 | BUILD_DIR | dist/site | 发布器设置为 release/site |
 | ASTRO_TELEMETRY_DISABLED | 构建建议 1 | 禁用 Astro 遥测 |
 | ADMIN_NAME / ADMIN_PASSWORD | undefim / 随机生成 | create-admin 脚本使用；不要在命令行明文写密码 |
+
+### 访客统计 IP 国家库
+
+访客国家/地区由主站用 DB-IP “IP to Country Lite” 离线库（CC BY 4.0，后台访客页显示署名与版本）在本机查询，IP 不外发、不保存，只存两位国家代码。手动下载或更新：`DATA_DIR=./data npm run geoip:update`（容器内为 `docker compose exec blog npm run geoip:update`）。新文件会校验数据库类型与样例查询后原子替换，运行中的服务在一天内或打开后台访客页时载入。库缺失时国家记为“未知”，统计其余部分照常。子站不下载该库，由主站按子站转发的读者 IP 判断。国家/地区表示 IP 归属地而非实际位置，VPN、代理和数据库精度会影响判断；同一访客在窗口内使用不同国家的 IP，可能分别出现在多个国家中，国家占比按各国家去重访客数之和计算。
 
 `npm start` 和 dev:api 使用 Node 的 `--env-file-if-exists=.env`；直接执行脚本、Astro 构建和其他工具不能一概假设自动加载同样的环境。Compose `.env` 用于变量插值，只将 compose.yaml 列出的项目传入容器；ADMIN_PASSWORD 等不在其默认传入列表中。
 

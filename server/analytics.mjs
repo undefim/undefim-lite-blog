@@ -3,7 +3,7 @@
 // first-party cookie (or, without cookies, a hash that changes daily).
 import {createHash,randomBytes} from 'node:crypto';
 
-export const ANALYTICS_SCHEMA_VERSION=1;
+export const ANALYTICS_SCHEMA_VERSION=2;
 export const RETENTION_DAYS=120;
 // The same visitor viewing the same page again within this window (refreshes, back and forth) is one page view.
 export const REPEAT_WINDOW_MINUTES=30;
@@ -26,6 +26,11 @@ export function migrateAnalyticsSchema(db){
    CREATE INDEX visit_events_site_time ON visit_events(site_id, created_at);
    CREATE INDEX visit_events_time ON visit_events(created_at);`);
    db.prepare('INSERT INTO analytics_schema_migrations VALUES (1,?)').run(new Date().toISOString());
+  }
+  if(latest<2){
+   // v2: visitor country (ISO 3166-1 alpha-2, '' when unknown). Rows recorded before stay unknown: no IP was kept.
+   db.exec("ALTER TABLE visit_events ADD COLUMN country TEXT NOT NULL DEFAULT ''");
+   db.prepare('INSERT INTO analytics_schema_migrations VALUES (2,?)').run(new Date().toISOString());
   }
   db.exec('COMMIT');
  }catch(error){db.exec('ROLLBACK');throw error}
@@ -69,15 +74,15 @@ export function cleanPath(value){
 }
 
 export function createAnalytics(db){
- const insert=db.prepare('INSERT INTO visit_events(site_id,visitor,path,source_type,source,created_at) VALUES (?,?,?,?,?,?)');
+ const insert=db.prepare('INSERT INTO visit_events(site_id,visitor,path,source_type,source,country,created_at) VALUES (?,?,?,?,?,?,?)');
  // Uses the (site_id, created_at) index; the window holds only the last few minutes of that site's views.
  const recent=db.prepare('SELECT 1 FROM visit_events WHERE site_id=? AND created_at>=? AND visitor=? AND path=? LIMIT 1');
  let lastPrune=0;
  function prune(now){if(now-lastPrune<3600*1000)return;lastPrune=now;db.prepare('DELETE FROM visit_events WHERE created_at<?').run(now-RETENTION_DAYS*86400000)}
  // Returns false when the view repeats one recorded within REPEAT_WINDOW_MINUTES and is therefore not stored.
- function record({siteId='',visitor,path,source,now=Date.now()}){
+ function record({siteId='',visitor,path,source,country='',now=Date.now()}){
   if(recent.get(siteId,now-REPEAT_WINDOW_MINUTES*60000,visitor,path))return false;
-  insert.run(siteId,visitor,path,source.type,source.source||'',now);prune(now);return true;
+  insert.run(siteId,visitor,path,source.type,source.source||'',/^[A-Z]{2}$/.test(country)?country:'',now);prune(now);return true;
  }
 
  // Rolling windows (last 24 h / 7 d / 30 d) per site, plus the breakdown for one site (or all) and one window.
@@ -98,6 +103,7 @@ export function createAnalytics(db){
   const summary=db.prepare(`SELECT COUNT(*) AS pageviews,COUNT(DISTINCT site_id||visitor) AS visitors,SUM(source_type!='internal') AS entries FROM visit_events WHERE created_at>=?${filter}`).get(...args(days));
   const types=db.prepare(`SELECT source_type AS type,COUNT(*) AS visits,COUNT(DISTINCT site_id||visitor) AS visitors FROM visit_events WHERE created_at>=?${filter} AND source_type!='internal' GROUP BY source_type ORDER BY visits DESC`).all(...args(days));
   const sources=db.prepare(`SELECT source_type AS type,source,COUNT(*) AS visits,COUNT(DISTINCT site_id||visitor) AS visitors FROM visit_events WHERE created_at>=?${filter} AND source_type NOT IN ('internal','direct') GROUP BY source_type,source ORDER BY visits DESC LIMIT 20`).all(...args(days));
+  const countries=db.prepare(`SELECT country,COUNT(*) AS pageviews,COUNT(DISTINCT site_id||visitor) AS visitors FROM visit_events WHERE created_at>=?${filter} GROUP BY country ORDER BY visitors DESC,pageviews DESC`).all(...args(days));
   const pages=db.prepare(`SELECT path,COUNT(*) AS pageviews,COUNT(DISTINCT site_id||visitor) AS visitors FROM visit_events WHERE created_at>=?${filter} GROUP BY path ORDER BY pageviews DESC LIMIT 20`).all(...args(days));
 
   // Trend buckets: hourly for one day, otherwise calendar days in the viewer's time zone.
@@ -108,7 +114,7 @@ export function createAnalytics(db){
   const trend=Array.from({length:count},(_,i)=>{const b=lastBucket-count+1+i;const r=byBucket.get(b);return {start:new Date(b*size+offset).toISOString(),visitors:r?.visitors||0,pageviews:r?.pageviews||0}});
 
   return {generatedAt:new Date(now).toISOString(),retentionDays:RETENTION_DAYS,days,siteId,sites:siteRows,totals,
-   summary:{visitors:summary.visitors||0,pageviews:summary.pageviews||0,entries:summary.entries||0},types,sources,pages,trend};
+   summary:{visitors:summary.visitors||0,pageviews:summary.pageviews||0,entries:summary.entries||0},types,sources,countries,pages,trend};
  }
  return {record,report};
 }

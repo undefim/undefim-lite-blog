@@ -42,8 +42,8 @@ data/                         DATA_DIR，可配置；不是网站公开根目录
 | jobs | id PK, status, created_at, finished_at, log, urls | queued/running/success/failed；urls 是 JSON 字符串 |
 | comment_sources | id PK, data | Halo 原评论来源 JSON |
 | redirects | path PK, target | 历史发布路径映射 |
-| visit_events | id INTEGER PK, site_id（主站为空字符串，子站为其 ID）, visitor, path, source_type, source, created_at（毫秒） | 访客统计明细；索引 site_id/created_at 与 created_at；保留 120 天，写入时每小时最多清理一次 |
-| analytics_schema_migrations | version PK, applied_at | 访客统计迁移账本，当前版本 1 |
+| visit_events | id INTEGER PK, site_id（主站为空字符串，子站为其 ID）, visitor, path, source_type, source, created_at（毫秒）, country（v2，两位国家代码，未知为空字符串） | 访客统计明细；索引 site_id/created_at 与 created_at；保留 120 天，写入时每小时最多清理一次 |
+| analytics_schema_migrations | version PK, applied_at | 访客统计迁移账本，当前版本 2 |
 
 日期通常为 ISO 字符串，前台日期显示使用 Asia/Shanghai。WAL 和外键在连接初始化时启用。原始博客表没有 schema_version（子站与访客统计各有独立迁移账本，见下文），`CREATE TABLE IF NOT EXISTS` 不会升级旧表。新增列/约束时要设计幂等迁移、旧数据转换、备份和兼容回退。
 
@@ -129,11 +129,11 @@ ZIP 中 MD 与 images 目录一起上传，内联 Markdown 相对图片/链接�
 
 ## 访客统计数据与迁移
 
-[analytics.mjs](../server/analytics.mjs) 的 `migrateAnalyticsSchema` 在启动时于事务中执行：使用独立的 `analytics_schema_migrations` 账本（不复用子站迁移版本，避免旧程序因版本号升高拒绝启动），版本 1 新建 `visit_events` 及索引，不修改任何已有表。账本缺失但已有同名 `visit_events` 时报错回滚，不自动覆盖；账本版本高于程序时拒绝启动。
+[analytics.mjs](../server/analytics.mjs) 的 `migrateAnalyticsSchema` 在启动时于事务中执行：使用独立的 `analytics_schema_migrations` 账本（不复用子站迁移版本，避免旧程序因版本号升高拒绝启动），版本 1 新建 `visit_events` 及索引，不修改任何已有表；版本 2 用显式 `ALTER TABLE visit_events ADD COLUMN country TEXT NOT NULL DEFAULT ''` 增加国家列，已有记录保留并记为未知（从未保存 IP，无法回填）。账本缺失但已有同名 `visit_events` 时报错回滚，不自动覆盖；账本版本高于程序时拒绝启动。
 
-- 隐私：不保存 IP、UA、完整来源 URL 或查询串。visitor 为随机 `bvid` Cookie 的 SHA-256 截断值；浏览器不接受 Cookie 时退化为“当日 + IP + UA”的哈希（每日变化，跨天会重复计数）。来源只存分类和名称/域名；path 去掉查询和锚点。数据只经管理员接口读取，不进入公开快照。
+- 隐私：不保存 IP、UA、完整来源 URL 或查询串；国家由主站用本地 IP 库（见 [运维](OPERATIONS.md#访客统计-ip-国家库)）即时查询，只存国家代码。visitor 为随机 `bvid` Cookie 的 SHA-256 截断值；浏览器不接受 Cookie 时退化为“当日 + IP + UA”的哈希（每日变化，跨天会重复计数）。来源只存分类和名称/域名；path 去掉查询和锚点。数据只经管理员接口读取，不进入公开快照。
 - 计数口径：页面加载一次计一次浏览，但同一访客在同一站点 30 分钟内重复浏览同一路径（刷新、来回切换）只计一次（`REPEAT_WINDOW_MINUTES`，按 visitor+path 查询近期记录，利用 site_id/created_at 索引，无结构变化）；刷新归为站内跳转，不计进站与来源。JS 执行才记录，爬虫 UA 忽略，不是防作弊统计；访客为窗口内去重 visitor；进站次数排除站内跳转。与文章 `stats.visits`（1 小时 Cookie 去重的文章计数）是两套独立数据。
-- 升级：按现有流程完整备份并验证；启动后检查 `SELECT * FROM analytics_schema_migrations`、`PRAGMA integrity_check`。回退：旧程序忽略这两张表，直接回退代码即可；如需清除统计，在备份与停写条件下由维护者 `DROP TABLE visit_events; DROP TABLE analytics_schema_migrations;`，不要用旧整库覆盖新文章。
+- 升级：按现有流程完整备份并验证；启动后检查 `SELECT * FROM analytics_schema_migrations`、`PRAGMA integrity_check`。回退：未引入统计的旧程序忽略这两张表，直接回退代码即可；含 v1 统计但不认识 v2 的程序会因账本版本更高而拒绝启动；如需回退到 v1，先备份并停写，由维护者在事务中执行 `ALTER TABLE visit_events DROP COLUMN country; DELETE FROM analytics_schema_migrations WHERE version=2;`，仅丢弃国家信息，保留原访问记录；如需清除统计，在备份与停写条件下由维护者 `DROP TABLE visit_events; DROP TABLE analytics_schema_migrations;`，不要用旧整库覆盖新文章。
 
 ## 子站数据与迁移
 

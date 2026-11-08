@@ -13,7 +13,7 @@
 | 后台编辑交互 | admin main.tsx/style.css、对应 API | 表单、请求封装、错误与任务反馈 | updatedAt 冲突、草稿不意外发布、手机表单 | API 如有变化、ARCHITECTURE、CHANGELOG |
 | MD/ZIP 导入 | uploads.mjs、markdown.mjs、index.mjs /import、core tests | Front Matter、资源映射、限额、批处理 | 路径穿越、重复路径、缺图、扩展名、失败残留、默认草稿 | API、DATA-MODEL、CHANGELOG |
 | 发布/CDN/旧 URL | publish.mjs、db.mjs、Astro config、静态分发、Compose | 快照、队列、切换、重定向、缓存刷新 | 失败保旧站、并发草稿、路径碰撞、重启、旧哈希资产 | DATA-MODEL、API、OPERATIONS、CHANGELOG |
-| 评论/喜欢/统计 | index.mjs public routes、site.ts、db.mjs、analytics.mjs、Analytics.tsx、replica/server.mjs 代理白名单 | API、前台动态区域、限流 | 私密 ID 返回 404、邮箱不公开、审核/蜜罐、缓存 | API、DATA-MODEL、CHANGELOG |
+| 评论/喜欢/统计 | index.mjs public routes、site.ts、db.mjs、analytics.mjs、geoip.mjs、update-geoip.mjs、Analytics.tsx、replica/server.mjs 代理白名单 | API、前台动态区域、限流 | 私密 ID 返回 404、邮箱不公开、审核/蜜罐、缓存 | API、DATA-MODEL、CHANGELOG |
 | 登录/权限 | auth.mjs、index hooks、admin api/Login/Account、代理配置 | Cookie、会话、CSRF、Origin | 未登录、伪造来源、无效 CSRF、改密注销其他会话 | API、OPERATIONS、CHANGELOG |
 | 分类/标签/站点设置 | defaultSettings、cleanSettings、Taxonomy/SiteSettings、页面路由 | 稳定 ID 改名、slug、设置和生成页面 | 草稿/快照名称、历史不重写、路径冲突、保存后构建 | API、DATA-MODEL、ARCHITECTURE、CHANGELOG |
 | 独立子站 | replica-hub/build/protocol/migrations、replica agent/server、Replicas.tsx、publish、update-worker、compose.replica | 接入码、范围/外观、过滤构建、同步与程序更新 | 隔离两站、一次性码、哈希/路径、筛选、评论限流、更新来源、迁移幂等、多宽度；Docker 与替身测试分别记录 | REPLICA-SITES、API、DATA-MODEL、OPERATIONS、CHANGELOG |
