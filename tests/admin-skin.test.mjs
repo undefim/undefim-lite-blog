@@ -14,7 +14,8 @@ test('主题预览不保存，离开还原；相同设置再次保存后仍固�
  skin.preview('dream');skin.restore();assert.equal(visible,'kiln');
  skin.preview('dream');skin.preview('kiln');skin.apply('kiln');skin.restore();
  assert.equal(visible,'kiln');assert.equal(stored,'kiln');
- skin.apply('unknown');assert.equal(visible,'dream');assert.equal(stored,'dream');
+ skin.preview('dream');assert.equal(visible,'dream');
+ skin.apply('unknown');assert.equal(visible,'kiln');assert.equal(stored,'kiln');
 });
 
 test('本地存储不可用时，登录同步与未保存还原仍正常',()=>{

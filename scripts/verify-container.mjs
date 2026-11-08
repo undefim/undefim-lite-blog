@@ -18,7 +18,7 @@ assert.equal(await fs.readFile(path.join(dataDir,'application-revision'),'utf8')
 const current=await fs.readlink(path.join(dataDir,'current'));
 const previousFile=path.join(dataDir,'.container-smoke-release');
 try{assert.equal(await fs.readFile(previousFile,'utf8'),current,'同版本重启不应重新发布静态站点')}catch(e){if(e.code!=='ENOENT')throw e;await fs.writeFile(previousFile,current,{mode:0o600})}
-const page=await fetch(root+'/');assert.equal(page.status,200);assert.match(await page.text(),/data-skin="dream"/);
+const page=await fetch(root+'/');assert.equal(page.status,200);assert.match(await page.text(),/data-skin="kiln"/);
 const admin=await fetch(root+'/admin/');assert.equal(admin.status,200);assert.equal(admin.headers.get('cache-control'),'no-store');
 assert.equal((await fetch(root+'/api/system/update')).status,401);
 assert.equal((await fetch(root+'/data/blog.sqlite')).status,404);

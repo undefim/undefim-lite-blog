@@ -1,9 +1,9 @@
 import React,{useEffect,useMemo,useRef,useState} from 'react';
 import {mascotMarkup,campfireMarkup} from '../../src/lib/kiln-art.mjs';
-import {createSkinController,SKIN_KEY} from './skin';
+import {createSkinController,SKIN_KEY} from './skin';import {defaultSiteTheme} from '../../server/themes.mjs';
 
 // Saved site theme is authoritative after login; the inline script restores the last choice for the first paint.
-const currentSkin=()=>document.documentElement.dataset.skin||'dream';
+const currentSkin=()=>document.documentElement.dataset.skin||defaultSiteTheme;
 const skinController=createSkinController({
  read:()=>document.documentElement.dataset.skin,
  write:id=>{document.documentElement.dataset.skin=id},
