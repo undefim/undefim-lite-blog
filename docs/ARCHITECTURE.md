@@ -66,7 +66,9 @@ flowchart LR
 | `src/scripts/background.ts` | 共享 Canvas 生命周期；Dream 星点与短流星、窑火余烬两个场景；尺寸变化、页面隐藏/恢复与减少动态偏好 |
 | `src/lib/content.mjs` | 构建快照读取、公开文章排序、摘要、正文转换、友链特殊渲染与资源映射 |
 | `src/pages/` | 静态路由和索引，见下表 |
-| `admin/src/main.tsx` | API 客户端和后台状态；App、Login、Editor、JobRows、Media、Comments、Taxonomy、SiteSettings、Account |
+| `admin/src/main.tsx` | API 客户端和后台状态；App、Login、Editor、JobRows、Comments、Taxonomy、SiteSettings、Account |
+| `admin/src/Media.tsx` | 媒体库：搜索、按类型和引用状态筛选、排序，详情弹窗中编辑名称和 alt、复制地址或 Markdown、查看引用、删除未引用文件 |
+| `server/media.mjs` | 媒体表迁移、引用扫描（草稿、已发布快照、回收站、站点设置，同时匹配原始路径和 encodeURI 编码后的路径）、删除时移到 media-trash |
 | `admin/src/style.css` | 后台分组侧栏（创作/站点〔含访客〕/系统，待审评论、发布失败、子站异常角标）、概览待处理、列表分段筛选、站点设置标签页、手机底部导航与抽屉、表单与编辑器布局 |
 | `admin/vite.config.ts` | `/admin/` 基路径、开发代理、`dist/admin` 输出 |
 | `server/index.mjs` | API 注册、Zod schema、鉴权接入、响应头、静态分发与错误处理 |
