@@ -37,7 +37,7 @@ data/                         DATA_DIR，可配置；不是网站公开根目录
 | comments | id PK, document_id FK, parent_id, author, email, content, status, created_at | pending/approved/hidden；parent_id 没有外键；索引 document_id/status |
 | stats | document_id PK/FK, visits, likes | 动态计数；新文档自动建立 |
 | media | id PK, name, path UNIQUE, type, size, sha256, created_at, alt | 文件元信息，实际字节在 media 目录。name 为可编辑的显示名称，path 上传后不变。alt 由 media_schema_migrations v1 追加 |
-| media_schema_migrations | version PK, applied_at | 媒体表迁移登记（`server/media.mjs`）。v1：`ALTER TABLE media ADD COLUMN alt TEXT NOT NULL DEFAULT ''`。旧版程序忽略此列，回退无需清理；如需彻底回退，先备份，再删除该列和登记行 |
+| media_schema_migrations | version PK, applied_at | 媒体表迁移登记（`server/media.mjs`）。v1：`ALTER TABLE media ADD COLUMN alt TEXT NOT NULL DEFAULT ''`。当前上传使用显式列名；旧版无列名的七字段 INSERT 不兼容新增列，不能直接回退，处理方法见下文 |
 | users | name PK, password_hash | scrypt 盐与哈希，不保存明文密码 |
 | sessions | token_hash PK, username, expires_at, csrf | expires_at 为毫秒时间戳；只保存 Token SHA-256 |
 | jobs | id PK, status, created_at, finished_at, log, urls | queued/running/success/failed；urls 是 JSON 字符串 |
@@ -47,6 +47,8 @@ data/                         DATA_DIR，可配置；不是网站公开根目录
 | analytics_schema_migrations | version PK, applied_at | 访客统计迁移账本，当前版本 2 |
 
 日期通常为 ISO 字符串，前台日期显示使用 Asia/Shanghai。WAL 和外键在连接初始化时启用。原始博客表没有 schema_version（子站与访客统计各有独立迁移账本，见下文），`CREATE TABLE IF NOT EXISTS` 不会升级旧表。新增列/约束时要设计幂等迁移、旧数据转换、备份和兼容回退。
+
+媒体库 v1 升级后，检查 `PRAGMA table_info(media)` 中存在 `alt`、`SELECT * FROM media_schema_migrations` 登记版本 1，并核验媒体记录、上传、编辑与 SQLite 完整性。回退前检查目标版本的 `server/uploads.mjs`：`v2026.10.02` 等旧版使用 `INSERT INTO media VALUES (?,?,?,?,?,?,?)`，新增列后会报“8 columns but 7 values were supplied”，不是忽略新增列。需要回退到这类版本时，先完整备份并验证、停止所有写入，在同一事务中执行 `ALTER TABLE media DROP COLUMN alt; DELETE FROM media_schema_migrations WHERE version=1;`，再启动旧版并在隔离数据上验证上传、Markdown/ZIP 媒体导入及完整性。此操作移除 alt 元数据，其他媒体记录和实际文件保留；如需保留 alt，应保留备份或先在目标旧版补入显式列名写入。重新升级时会再次执行迁移。不要为回退恢复旧整库而覆盖新增正文；更新器的代码/镜像回退不会自动回退此数据库列。
 
 ## 文档 JSON 和状态
 
