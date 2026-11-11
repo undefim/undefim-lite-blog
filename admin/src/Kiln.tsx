@@ -48,7 +48,7 @@ export function KilnCompanion({variant='sidebar',building=false,busy=false,shy=f
   const after=(fn:()=>void,ms:number)=>{const id=window.setTimeout(()=>{timers.delete(id);fn()},ms);timers.add(id);return id};
   // Re-check visibility when the timer fires instead of piling up work for a background tab.
   const later=(fn:()=>void,min:number,max:number)=>after(()=>{if(dead)return;if(document.hidden||!root.getClientRects().length){later(fn,min,max);return}fn()},random(min,max));
-  let transient:string|null=null,asleep=false,gaze=false,moving=false,atFire=false,x=0,lastActivity=Date.now(),held:[number,number]|null=null,pointer:[number,number]=[0,0],tip=Math.floor(Math.random()*tips.length),bubbleTimer=0,arrival=0,dead=false;
+  let transient:string|null=null,asleep=false,gaze=false,moving=false,atFire=false,x=0,lastActivity=Date.now(),held:[number,number]|null=null,pointer:[number,number]=[0,0],tip=Math.floor(Math.random()*tips.length),bubbleTimer=0,arrival=0,turnBack=0,dead=false;
 
   const eyesAt=()=>{const [dx,dy]=held||pointer;eyes.style.transform=`translate(${dx.toFixed(2)}px,${dy.toFixed(2)}px)`};
   const say=(text:string)=>{bubble.textContent=text;bubble.classList.add('is-visible');clearTimeout(bubbleTimer);bubbleTimer=window.setTimeout(()=>bubble.classList.remove('is-visible'),2600)};
@@ -65,6 +65,7 @@ export function KilnCompanion({variant='sidebar',building=false,busy=false,shy=f
    else if(building&&atFire)pose='warm';
    else if(asleep)pose='doze';
    else if(gaze)pose='gaze';
+   if(w.dataset.pose==='shy'&&pose!=='shy'){w.classList.remove('is-uncovering');void w.offsetWidth;w.classList.add('is-uncovering');clearTimeout(turnBack);turnBack=window.setTimeout(()=>w.classList.remove('is-uncovering'),450)}
    w.dataset.pose=pose;
    w.classList.toggle('is-reading',busy&&!building&&pose==='idle');
    root.toggleAttribute('data-stoked',building);

@@ -88,13 +88,29 @@
 :root[data-skin=kiln] .is-reading .mascot-look{transform:translate(1px,1px)!important}
 :root[data-skin=kiln] .is-reading .mascot svg{animation:kiln-nod .5s ease-in-out infinite}
 :root[data-skin=kiln] .mascot.is-hopping svg{animation:kiln-hop .55s var(--ease)}
-/* shy: covers its eyes with both hands (a password field has focus); cheer: arms up, happy eyes after a success */
+/* shy: a password field has focus, so it covers its eyes (after the classic animated login avatars). The side arms
+   hand over to two forearms and paws that rise from below to the eyes with a small overshoot; then the paws bob and the left one now and then
+   dips to peek. Leaving the field (.is-uncovering, set by the admin) lowers them back to the arms. Paws use `translate`
+   for the rise and `transform` for the idle motion so the two never fight. */
 :root[data-skin=kiln] .mascot-hands{display:none}
-:root[data-skin=kiln] .mascot-hands rect{fill:#f0b49b;transition:transform .2s var(--ease)}
-:root[data-skin=kiln] [data-pose=shy] .mascot-hands{display:inline}
-:root[data-skin=kiln] [data-pose=shy] .eyes-open{display:none}
-:root[data-skin=kiln] [data-pose=shy] .eyes-closed{display:inline}
-:root[data-skin=kiln] [data-pose=shy] .mascot-arm{transform:translateY(-2px)}
+:root[data-skin=kiln] [data-pose=shy] .mascot-hands,:root[data-skin=kiln] .is-uncovering .mascot-hands{display:inline}
+:root[data-skin=kiln] .paw-shade{fill:#a85a42}
+:root[data-skin=kiln] .paw-skin{fill:#e58b6c}
+:root[data-skin=kiln] [data-pose=shy] .mascot-look{transform:none!important}
+:root[data-skin=kiln] [data-pose=shy] .mascot-blush{display:inline}
+:root[data-skin=kiln] [data-pose=shy] .mascot-arm{opacity:0}
+:root[data-skin=kiln] [data-pose=shy] .paw-l{animation:kiln-paw-l-up .5s cubic-bezier(.34,1.5,.6,1) both,kiln-paw-peek 4.2s ease-in-out 1.4s infinite}
+:root[data-skin=kiln] [data-pose=shy] .paw-r{animation:kiln-paw-r-up .5s cubic-bezier(.34,1.5,.6,1) .06s both,kiln-paw-bob 2.6s ease-in-out .6s infinite}
+:root[data-skin=kiln] .is-uncovering .paw-l{animation:kiln-paw-l-down .38s cubic-bezier(.5,0,.75,0) both}
+:root[data-skin=kiln] .is-uncovering .paw-r{animation:kiln-paw-r-down .38s cubic-bezier(.5,0,.75,0) .04s both}
+:root[data-skin=kiln] .is-uncovering .mascot-arm{animation:kiln-arm-return .42s step-end both}
+@keyframes kiln-paw-l-up{0%{translate:0 4px;opacity:0}20%{opacity:1}100%{translate:0 0;opacity:1}}
+@keyframes kiln-paw-r-up{0%{translate:0 4px;opacity:0}20%{opacity:1}100%{translate:0 0;opacity:1}}
+@keyframes kiln-paw-l-down{0%{translate:0 0;opacity:1}85%{opacity:1}100%{translate:0 4px;opacity:0}}
+@keyframes kiln-paw-r-down{0%{translate:0 0;opacity:1}85%{opacity:1}100%{translate:0 4px;opacity:0}}
+@keyframes kiln-arm-return{0%{opacity:0}100%{opacity:1}}
+@keyframes kiln-paw-bob{0%,100%{transform:none}50%{transform:translateY(-1px)}}
+@keyframes kiln-paw-peek{0%,58%,100%{transform:none}66%,80%{transform:translateY(2px)}}
 :root[data-skin=kiln] [data-pose=cheer] .eyes-open{display:none}
 :root[data-skin=kiln] [data-pose=cheer] .eyes-happy,:root[data-skin=kiln] [data-pose=cheer] .mascot-blush{display:inline}
 :root[data-skin=kiln] [data-pose=cheer] .mascot-arm{transform:translateY(-3px)}

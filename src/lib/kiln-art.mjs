@@ -13,7 +13,7 @@ const rect=(cls,x,y,width,height)=>`<rect class="${cls}" x="${x}" y="${y}" width
 
 // Inner markup of .mascot-walker: the button, speech bubble, thought bubble and sleep letters.
 // The mascot is drawn on a 22x16 grid and always faces the reader.
-// `hands` adds two light-coloured hands drawn over the face, used by the admin's shy pose (the public site omits them).
+// `hands` adds two paws that rise from the arms to cover the eyes, used by the admin's shy pose (the public site omits them).
 export function mascotMarkup({size=3,label='像素吉祥物，点击互动',hands=false}={}){
  return `<button type="button" class="mascot" aria-label="${escape(label)}"><svg width="${22*size}" height="${16*size}" viewBox="0 0 22 16" shape-rendering="crispEdges" aria-hidden="true">`+
   `<rect class="mascot-shadow" x="4" y="15" width="14" height="1"/>`+
@@ -32,7 +32,7 @@ export function mascotMarkup({size=3,label='像素吉祥物，点击互动',hand
     `<g class="mascot-eyes eyes-closed"><rect class="m-eye" x="6" y="7" width="3" height="1"/><rect class="m-eye" x="13" y="7" width="3" height="1"/></g>`+
     `<g class="mascot-eyes eyes-happy"><rect class="m-eye" x="6" y="7" width="1" height="1"/><rect class="m-eye" x="7" y="6" width="2" height="1"/><rect class="m-eye" x="9" y="7" width="1" height="1"/><rect class="m-eye" x="12" y="7" width="1" height="1"/><rect class="m-eye" x="13" y="6" width="2" height="1"/><rect class="m-eye" x="15" y="7" width="1" height="1"/></g>`+
    `</g>`+
-   (hands?`<g class="mascot-hands"><rect x="6" y="4" width="4" height="4"/><rect x="12" y="4" width="4" height="4"/></g>`:'')+
+   (hands?`<g class="mascot-hands"><g class="mascot-paw paw-l"><rect class="paw-shade" x="3" y="8" width="6" height="1"/><rect class="paw-skin" x="1" y="7" width="5" height="1"/><rect class="paw-skin" x="6" y="4" width="3" height="4"/><rect class="m-light" x="6" y="4" width="3" height="1"/><rect class="paw-shade" x="7" y="4" width="1" height="1"/></g><g class="mascot-paw paw-r"><rect class="paw-shade" x="13" y="8" width="6" height="1"/><rect class="paw-skin" x="16" y="7" width="5" height="1"/><rect class="paw-skin" x="13" y="4" width="3" height="4"/><rect class="m-light" x="13" y="4" width="3" height="1"/><rect class="paw-shade" x="14" y="4" width="1" height="1"/></g></g></g>`:'')+
   `</g></svg></button>`+
   `<span class="mascot-bubble" role="status" aria-live="polite"></span>`+
   `<span class="mascot-thought" aria-hidden="true"><i></i><i></i><i></i><b><svg width="18" height="18" viewBox="0 0 6 6" shape-rendering="crispEdges">`+
