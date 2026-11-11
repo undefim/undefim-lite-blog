@@ -12,10 +12,13 @@ let searchIndex:any[]|null=null,searchLoading:Promise<void>|null=null,searchErro
 function renderSearch(){const q=$<HTMLInputElement>('#site-search')!.value.trim().toLowerCase();const box=$('.search-results')!;box.replaceChildren();if(searchIndex===null){box.textContent=searchError?'搜索索引暂时无法加载，请关闭后重试。':'正在加载搜索索引…';return}const found=q?searchIndex.filter(p=>(p.title+' '+p.text).toLowerCase().includes(q)).slice(0,30):[];if(!found.length){const p=document.createElement('p');p.textContent=q?'没有找到相关文章。':'输入关键词，搜索全部公开文章。';box.append(p)}for(const p of found){const a=document.createElement('a');a.className='search-result';a.href=p.path;const strong=document.createElement('strong');strong.textContent=p.title;const excerpt=document.createElement('p');excerpt.textContent=p.excerpt;a.append(strong,excerpt);box.append(a)}}
 function loadSearch(){if(searchIndex!==null)return Promise.resolve();if(searchLoading)return searchLoading;searchError=false;searchLoading=(async()=>{try{const response=await fetch('/search-index.json');if(!response.ok)throw new Error('索引加载失败');searchIndex=await response.json()}catch{searchError=true}finally{searchLoading=null;renderSearch()}})();return searchLoading}
 
+const uptimeText:Record<string,string>={up:'所有服务运行正常',degraded:'部分服务异常',down:'服务中断',unknown:'服务状态'};
+// Footer status pill: hidden unless the server has an Uptime Kuma page configured; failures fall back to a plain link.
+async function loadUptime(){const line=$('.uptime-line'),pill=$<HTMLAnchorElement>('.uptime-pill');if(!line||!pill)return;try{const r=await fetch('/api/public/uptime');if(!r.ok)return;const d=await r.json();if(!d.configured||!/^https?:\/\//.test(d.url))return;const status=uptimeText[d.status]?d.status:'unknown';pill.href=d.url;pill.dataset.status=status;const pct=status!=='unknown'&&typeof d.uptime==='number'?` · ${(Math.floor(d.uptime*10000)/100).toFixed(2)}%`:'';pill.querySelector('.uptime-text')!.textContent=uptimeText[status]+pct;pill.title=d.window?`查看状态页（可用率统计窗口：${d.window==='30d'?'30 天':'24 小时'}）`:'查看状态页';line.hidden=false}catch{}}
 function boot(){
  matchMedia('(prefers-color-scheme: dark)').addEventListener('change',e=>{if(!userTheme&&!darkOnly){document.documentElement.dataset.theme=e.matches?'dark':'light';updateThemeButton()}});
  const background=$<HTMLCanvasElement>('.background-stars');if(background)startBackground(background,skin);
- const days=$('#site-days');if(days)days.textContent=String(Math.max(0,Math.floor((Date.now()-new Date((days as HTMLElement).dataset.start!).getTime())/86400000)));
+ loadUptime();const days=$('#site-days');if(days)days.textContent=String(Math.max(0,Math.floor((Date.now()-new Date((days as HTMLElement).dataset.start!).getTime())/86400000)));
  const dialog=$<HTMLDialogElement>('.search-dialog')!;
  $('.search-close')?.addEventListener('click',()=>dialog.close());
  dialog?.addEventListener('click',e=>{if(e.target===dialog)dialog.close()});
