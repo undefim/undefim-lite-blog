@@ -130,8 +130,10 @@ path 必须以 `/` 开始，不可为根；不含 query/hash、反斜线、控�
 | --- | --- | --- | --- |
 | POST | `/api/preview` | `{source,format}`，source <=2000000，format markdown/html | `{html}`，经过安全清洗；不保存 |
 | POST | `/api/import` | multipart，通常重复 files 字段，.md 或 .zip | `{documents:Document[],job:null或ID}` |
-| GET | `/api/media` | 无 | 媒体数组，按 created_at 倒序 |
-| POST | `/api/media` | multipart files | 媒体数组，每项 id/name/path/type/size/sha256/created_at |
+| GET | `/api/media` | 无 | 媒体数组，按 created_at 倒序；每项含 alt 和 usage（引用位置数组：id/kind/title/path/deleted，kind 为 post、page 或 settings） |
+| POST | `/api/media` | multipart files | 媒体数组，每项 id/name/path/type/size/sha256/created_at/alt |
+| PATCH | `/api/media/:id` | `{name?, alt?}` | 更新显示名称（1-200 字，不能为空）和替代文字（最多 300 字），去除控制字符；文件地址不变。返回含 usage 的媒体项；不存在为 404 |
+| DELETE | `/api/media/:id` | 无 | 仅可删除无引用的文件，否则 409。文件移到不公开的 `data/media-trash/<id>/`（附 meta.json），数据库行删除，公开地址立即失效 |
 | GET | `/api/comments` | 无 | 原评论字段 + path/document_title，含后台可见 email |
 | PATCH | `/api/comments/:id` | `{status,content?}` | `{ok:true}`；status approved/pending/hidden，content <=5000 |
 
