@@ -126,6 +126,7 @@ APP_REVISION=$(git rev-parse HEAD) docker compose up -d --build
 | TRUST_PROXY | 仅字符串 true 启用 | Compose 开启；应用端口必须保持受可信代理保护 |
 | TRACKING_ENABLED | 生产 false | 仅 true 且设置有 umamiWebsiteId 才在构建中加入脚本；与内置访客统计无关 |
 | GEOIP_AUTO_UPDATE | 默认 true（Compose 传入） | 主站启动时及每 24 小时检查 IP 国家库，缺失或超过 32 天即从 download.db-ip.com 下载当月（失败回退上月）；false 时只读取已有文件。需要出站 HTTPS；失败保留旧库并写日志，重启生效 |
+| UPTIME_KUMA_URL / UPTIME_KUMA_SLUG | 默认空（Compose 传入） | 后备配置：后台“站点设置 → 备案与偏好 → 服务状态”填写地址后以后台为准。Uptime Kuma 根地址（http/https）与公开状态页 slug。两者都有效时页脚显示服务状态胶囊并链接到 `<URL>/status/<slug>`；主站需能出站访问该地址。留空或非法则不显示。只需重启容器，无需重新发布 |
 | GEOIP_DB | DATA_DIR/geoip/country.mmdb | IP 国家库路径（私有，不对外提供，不进完整备份，可随时重新下载）；Compose 未传入，一般无需修改 |
 | CLOUDFLARE_ZONE_ID | 未配置 | 可选区域缓存刷新 |
 | CLOUDFLARE_API_TOKEN | 未配置，秘密 | 最小范围区域缓存清除权限；只放受保护环境 |

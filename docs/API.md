@@ -28,6 +28,7 @@ JSON 请求使用 `Content-Type: application/json`；文件用 multipart/form-da
 | POST | `/api/public/documents/:id/visit` | 无正文 | `{visits,likes}`；30 次/分钟，Cookie 1 小时去重 |
 | POST | `/api/public/documents/:id/like` | 无正文 | `{visits,likes}`；10 次/分钟，Cookie 365 天去重 |
 | POST | `/api/public/pageview` | `{path,referrer?,campaign?,reload?}`，path 最长 1000、须为站内路径（不能是 `/admin`、`/api`、`//`），referrer 最长 2000，campaign（utm_source）最长 200，reload 为布尔值（默认 false） | `{ok:true,recorded}`；60 次/分钟；同一访客 30 分钟内重复浏览同一站点同一路径返回 recorded=false 不写入；首次访问设置 `bvid` HttpOnly Cookie（Path=/api/public，365 天）；爬虫 UA 返回 recorded=false 不写入；无效路径 400；主站按读者 IP（子站转发时为 `X-Replica-Client-IP`）离线查询国家代码一并保存，IP 本身不保存 |
+| GET | `/api/public/uptime` | 无 | 未配置时 `{configured:false}`；否则 `{configured:true,status,uptime,window,url}`，status 为 up/degraded/down/unknown，uptime 为 0–1 的平均可用率（无数据时 null），window 为 `30d` 或 `24h`，url 为 Uptime Kuma 状态页。服务端每 60 秒最多请求一次上游，上游失败返回 unknown；不透出监控名称、地址或消息；30 次/分钟。子站不转发此接口，子站页脚不显示状态 |
 
 评论 author 去首尾空白后 1–60 字符，content 1–5000；email 可省略、空或合法邮箱；website 最长 200，是蜜罐字段，非空时返回成功但不写入。关闭评论返回 403。当前提交接口不接收 parent_id；保留历史回复关系不代表已实现新的嵌套回复功能。限流为进程内实现；Cookie 去重不提供强身份或防作弊保证。
 
@@ -162,6 +163,7 @@ path 必须以 `/` 开始，不可为根；不含 query/hash、反斜线、控�
 设置键：title、description、author、bio、location、announcement、email、github、qq、startDate、umamiWebsiteId（字符串 <=3000）；avatar/logo/background（URL）；accent（六位十六进制色）；cardOpacity（0.5–1）；siteTheme（`dream` 或 `kiln`，登记于 `server/themes.mjs`，其他值 400“前台主题无效”；旧数据缺省为 `dream`）；importAutoPublish（boolean）；navigation、categories、tags、links；assetMap（迁移资源映射，目前缺少专门结构校验，不能存放秘密）。只接收 defaultSettings 中的键，其他键被忽略；公开构建导出这些默认键，不应把 Token 加入其中。
 
 - icpRecord、publicSecurityRecord：可选备案文本，trim 后最多 100 字符，默认空串；空白归为空串，非字符串或超长返回 400。分别链接工信部备案系统与公安备案系统；公安文本含独立的 14 位数字时链接对应查询，否则链接公安备案首页。不解析 HTML，不接收自定义链接，前台按转义文本显示。保存不会自动构建，须点击“发布站点”生效。
+- uptimeKumaUrl、uptimeKumaSlug：可选的 Uptime Kuma 根地址与公开状态页 slug，trim 后分别最多 500、100 字符，默认空串。地址非空时须为 http(s)，slug 只允许字母、数字和连字符，否则 400。两者都有效时 `/api/public/uptime` 按此返回（每次请求读取，保存后立即生效，无需发布）；地址为空时回退到环境变量 `UPTIME_KUMA_URL`/`UPTIME_KUMA_SLUG`。
 - navigation：最多 20 个 `{label<=40,href:URL}`。
 - categories/tags：各最多 1000 个 `{id?,name,slug,description?,color?,children?,hidden?}`；name 1–100，slug 1–150 且只含 Unicode 字母/数字/点/下划线/连字符，同组 slug 不重复，description <=2000，children 为字符串数组。
 - links：最多 300 个 `{name<=100,url:URL,logo?:URL}`。

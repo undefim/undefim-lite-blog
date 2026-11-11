@@ -265,3 +265,8 @@
  :root[data-skin=kiln] .reveal-pending{opacity:1;transform:none}
  :root[data-skin=kiln] .floating-actions{transform:none}
 }
+:root[data-skin=kiln] .uptime-pill{color:var(--muted)!important}
+:root[data-skin=kiln] .uptime-pill:hover{color:var(--accent-soft)!important}
+:root[data-skin=kiln] .uptime-pill[data-status=up]{--dot:#8fbf8a}
+:root[data-skin=kiln] .uptime-pill[data-status=degraded]{--dot:#e8a07f}
+:root[data-skin=kiln] .uptime-pill[data-status=down]{--dot:#e0645a}
