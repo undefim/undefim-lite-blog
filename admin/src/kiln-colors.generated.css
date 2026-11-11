@@ -117,3 +117,9 @@
 :root[data-skin=kiln] .bar-list-value{color:#c0bbb5}
 :root[data-skin=kiln] .bar-list-value strong{color:#e9e6e2}
 :root[data-skin=kiln] .bar-list-track{background:#f4e8dc0a}
+:root[data-skin=kiln] .icon-button:hover{background:#f4e8dc0d}
+:root[data-skin=kiln] .media-usage:not(.unused){color:#79b59d}
+:root[data-skin=kiln] .media-preview{background:#1e1a16}
+:root[data-skin=kiln] .media-usage-list li{background:#f4e8dc08}
+:root[data-skin=kiln] .button.danger{color:#f4e8dc;background:#b65c5c;border-color:#b65c5c}
+:root[data-skin=kiln] select option{color:#e9e6e2;background:#292520}

@@ -7,8 +7,8 @@ export async function storeMedia(buffer,name,namespace=randomUUID()){
  if(buffer.length>40*1024*1024)throw new Error('文件超过 40 MB');
  const safe=path.basename(name).normalize('NFKC').replace(/[^\p{L}\p{N}._-]/gu,'-');const url=`/upload/${namespace}/${randomUUID().slice(0,8)}-${safe}`;
  const file=path.join(dataDir,'media',url.slice(1));await fs.mkdir(path.dirname(file),{recursive:true});await fs.writeFile(file,buffer);
- const media={id:randomUUID(),name,path:url,type:types[ext],size:buffer.length,sha256:createHash('sha256').update(buffer).digest('hex'),created_at:new Date().toISOString()};
- db.prepare('INSERT INTO media VALUES (?,?,?,?,?,?,?)').run(media.id,media.name,media.path,media.type,media.size,media.sha256,media.created_at);return media;
+ const media={id:randomUUID(),name,path:url,type:types[ext],size:buffer.length,sha256:createHash('sha256').update(buffer).digest('hex'),created_at:new Date().toISOString(),alt:''};
+ db.prepare('INSERT INTO media (id,name,path,type,size,sha256,created_at) VALUES (?,?,?,?,?,?,?)').run(media.id,media.name,media.path,media.type,media.size,media.sha256,media.created_at);return media;
 }
 export async function markdownUpload(bytes,filename){
  if(bytes.length>40*1024*1024)throw new Error('上传超过 40 MB');

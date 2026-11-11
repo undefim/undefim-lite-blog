@@ -36,7 +36,8 @@ data/                         DATA_DIR，可配置；不是网站公开根目录
 | settings | key PK, value | JSON 值，与 defaultSettings 合并 |
 | comments | id PK, document_id FK, parent_id, author, email, content, status, created_at | pending/approved/hidden；parent_id 没有外键；索引 document_id/status |
 | stats | document_id PK/FK, visits, likes | 动态计数；新文档自动建立 |
-| media | id PK, name, path UNIQUE, type, size, sha256, created_at | 文件元信息，实际字节在 media 目录 |
+| media | id PK, name, path UNIQUE, type, size, sha256, created_at, alt | 文件元信息，实际字节在 media 目录。name 为可编辑的显示名称，path 上传后不变。alt 由 media_schema_migrations v1 追加 |
+| media_schema_migrations | version PK, applied_at | 媒体表迁移登记（`server/media.mjs`）。v1：`ALTER TABLE media ADD COLUMN alt TEXT NOT NULL DEFAULT ''`。旧版程序忽略此列，回退无需清理；如需彻底回退，先备份，再删除该列和登记行 |
 | users | name PK, password_hash | scrypt 盐与哈希，不保存明文密码 |
 | sessions | token_hash PK, username, expires_at, csrf | expires_at 为毫秒时间戳；只保存 Token SHA-256 |
 | jobs | id PK, status, created_at, finished_at, log, urls | queued/running/success/failed；urls 是 JSON 字符串 |
