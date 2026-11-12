@@ -1,4 +1,4 @@
 ---
 import Site from '../layouts/Site.astro';import {posts,dateLabel} from '../lib/content.mjs';const all=posts.toSorted((a,b)=>new Date(b.date)-new Date(a.date));const years=[...new Set(all.map(p=>new Date(p.date).getFullYear()))];
 ---
-<Site title="文章归档"><section class="card archive"><h1>文章归档</h1><p class="muted">共 {posts.length} 篇公开文章</p>{years.map(year=><section><h2>{year}</h2><ol>{all.filter(p=>new Date(p.date).getFullYear()===year).map(p=><li><time>{dateLabel(p.date)}</time><a href={p.path}>{p.title}</a></li>)}</ol></section>)}</section></Site>
+<Site title="文章归档"><section class="card archive"><h1>文章归档</h1><p class="muted">共 {posts.length} 篇公开文章</p>{years.map(year=><section><h2>{year}</h2><ol>{all.filter(p=>new Date(p.date).getFullYear()===year).map(p=><li style={`--i:${Math.min(all.indexOf(p),16)}`}><time>{dateLabel(p.date)}</time><a href={p.path}>{p.title}</a></li>)}</ol></section>)}</section></Site>
