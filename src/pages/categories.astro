@@ -1,4 +1,4 @@
 ---
 import Site from '../layouts/Site.astro';import {config,posts} from '../lib/content.mjs';
 ---
-<Site title="文章分类"><section class="card archive"><h1>文章分类</h1><div class="taxonomy-grid">{config.categories.map(t=><a href={`/categories/${t.slug}`}><strong>{t.name}</strong><span>{posts.filter(p=>p.categories.includes(t.name)).length} 篇</span><p>{t.description}</p></a>)}</div></section></Site>
+<Site title="文章分类"><section class="card archive"><h1>文章分类</h1><div class="taxonomy-grid">{config.categories.map((t,i)=><a href={`/categories/${t.slug}`} style={`--i:${Math.min(i,12)}`}><strong>{t.name}</strong><span>{posts.filter(p=>p.categories.includes(t.name)).length} 篇</span><p>{t.description}</p></a>)}</div></section></Site>

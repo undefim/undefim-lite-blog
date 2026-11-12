@@ -1,0 +1,96 @@
+/* Motion shared by every theme. Selectors are kept at low specificity so a theme's own rules (kiln.css) win
+   wherever it already defines the same effect. Everything here is decorative: site.css turns element animations
+   and transitions off under prefers-reduced-motion, and the block at the end covers pseudo-elements. */
+
+/* Shared elements between a post card and its article. motion.ts attaches data-morph for one navigation only. */
+.article-header h1{width:fit-content}
+.post-card h2[data-morph]{width:fit-content}
+[data-morph=title]{view-transition-name:post-title}
+[data-morph=cover]{view-transition-name:post-cover}
+::view-transition-group(post-title),::view-transition-group(post-cover){animation-duration:.48s;animation-timing-function:cubic-bezier(.22,1,.36,1)}
+::view-transition-old(post-title),::view-transition-new(post-title){height:100%;object-fit:contain;object-position:left top}
+::view-transition-group(post-cover){overflow:clip;border-radius:8px}
+::view-transition-old(post-cover),::view-transition-new(post-cover){height:100%;object-fit:cover}
+
+/* Light/dark switch: the new theme is revealed as a growing circle. Other named groups and colour transitions
+   are suspended meanwhile so the two snapshots stay crisp. */
+:root[data-theme-switch] body *{view-transition-name:none!important}
+:root[data-theme-switch] body *,:root[data-theme-switch] body *:before,:root[data-theme-switch] body *:after{transition:none!important}
+:root[data-theme-switch]::view-transition-old(root),:root[data-theme-switch]::view-transition-new(root){mix-blend-mode:normal;animation:none}
+:root[data-theme-switch]::view-transition-new(root){animation:theme-reveal .55s cubic-bezier(.4,0,.2,1) both}
+@keyframes theme-reveal{from{clip-path:circle(0 at var(--reveal-x,50%) var(--reveal-y,0))}to{clip-path:circle(var(--reveal-r,150vmax) at var(--reveal-x,50%) var(--reveal-y,0))}}
+
+/* Entrances */
+@keyframes rise-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+@keyframes fade-in{from{opacity:0}to{opacity:1}}
+@keyframes dialog-in{from{opacity:0;transform:translateY(12px) scale(.97)}to{opacity:1;transform:none}}
+@keyframes drawer-in{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:none}}
+main>:nth-child(2){animation-delay:.05s}
+main>:nth-child(3){animation-delay:.1s}
+main>:nth-child(4){animation-delay:.15s}
+main>:nth-child(n+5){animation-delay:.2s}
+.archive li,.taxonomy-grid a,.comment-item{animation:rise-in .5s cubic-bezier(.2,.8,.2,1) backwards;animation-delay:calc(.12s + var(--i,0)*36ms)}
+.comment-item{animation-delay:calc(var(--i,0)*45ms)}
+.search-dialog[open]{animation:dialog-in .28s cubic-bezier(.2,.8,.2,1) backwards}
+.search-dialog::backdrop,.lightbox::backdrop{animation:fade-in .25s ease both}
+.mobile-drawer{animation:drawer-in .28s cubic-bezier(.2,.8,.2,1) backwards}
+
+/* Hover and press feedback */
+.post-cover{overflow:hidden}
+.post-cover img{transition:transform .6s cubic-bezier(.2,.8,.2,1),filter .4s ease}
+.pagination a{transition:transform .25s cubic-bezier(.34,1.56,.64,1),background-color .2s ease,color .2s ease}
+.article-interactions button,.comment-submit button{transition:transform .25s cubic-bezier(.34,1.56,.64,1),background-color .2s ease,color .2s ease,border-color .2s ease}
+.article-interactions button:active,.comment-submit button:active{transform:scale(.96)}
+.taxonomy-grid a{transition:transform .3s cubic-bezier(.34,1.56,.64,1),border-color .2s ease,background-color .2s ease}
+@media(hover:hover) and (pointer:fine){
+ .post-card{transition:background-color .5s ease,transform .35s cubic-bezier(.2,.8,.2,1),box-shadow .35s ease}
+ .post-card:hover{transform:translateY(-3px)}
+ .post-card:hover .post-cover img{transform:scale(1.04)}
+ .pagination a:hover,.taxonomy-grid a:hover{transform:translateY(-2px)}
+}
+
+/* Like: the heart pops and fills, a ring of dots bursts from it. Kiln already pops the heart on click. */
+.like-button{position:relative}
+.like-button:disabled svg{fill:currentColor}
+:root:not([data-skin=kiln]) .like-button.is-liked svg{animation:heart-pop .45s cubic-bezier(.34,1.56,.64,1)}
+.like-burst{position:absolute;width:4px;height:4px;margin:-2px;border-radius:50%;pointer-events:none;color:var(--accent);animation:like-burst .6s cubic-bezier(.2,.8,.2,1) forwards}
+@keyframes heart-pop{0%{transform:scale(1)}40%{transform:scale(1.45)}100%{transform:scale(1)}}
+@keyframes like-burst{
+ from{opacity:1;box-shadow:0 0,0 0,0 0,0 0,0 0,0 0,0 0,0 0}
+ 60%{opacity:1}
+ to{opacity:0;box-shadow:0 -20px,14px -14px,20px 0,14px 14px,0 20px,-14px 14px,-20px 0,-14px -14px}
+}
+
+/* Copy feedback in code blocks */
+:root .code-toolbar button.is-copied{color:var(--accent);animation:copied-pop .35s cubic-bezier(.34,1.56,.64,1)}
+@keyframes copied-pop{from{transform:scale(.88)}to{transform:none}}
+
+/* Table of contents: one bar slides to the current entry. */
+.toc nav{position:relative}
+.toc-marker{position:absolute;left:0;top:0;width:2px;margin-left:-8px;border-radius:2px;background:var(--accent);opacity:0;pointer-events:none;transition:transform .35s cubic-bezier(.2,.8,.2,1),height .35s cubic-bezier(.2,.8,.2,1),opacity .3s ease}
+:root[data-skin=kiln] .toc-marker{margin-left:0}
+:root[data-skin=kiln] .toc.has-marker a.current{border-left-color:transparent}
+
+/* A heading reached from the table of contents glows briefly. */
+.prose .is-flashed{animation:target-flash 1.8s ease-out;border-radius:4px}
+@keyframes target-flash{
+ 0%,30%{background-color:color-mix(in srgb,var(--accent) 20%,transparent);box-shadow:0 0 0 6px color-mix(in srgb,var(--accent) 20%,transparent)}
+ 100%{background-color:transparent;box-shadow:0 0 0 6px transparent}
+}
+
+/* Back to top: a ring around the button fills with scroll progress (--page-progress, set by motion.ts). */
+.floating-actions .icon-button{position:relative}
+.floating-actions .icon-button:before{content:'';position:absolute;inset:-1px;padding:2px;border-radius:inherit;pointer-events:none;background:conic-gradient(var(--accent) calc(var(--page-progress,0)*1turn),transparent 0);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box exclude,linear-gradient(#000 0 0)}
+
+/* Image zoom: motion.ts animates the picture from its place in the text; the dialog itself must stay still. */
+.lightbox img{cursor:zoom-out}
+:root .lightbox.is-zooming[open]{animation:none!important}
+.lightbox.is-zooming button{animation:fade-in .3s ease .15s backwards;transition:opacity .2s ease}
+.lightbox::backdrop{transition:opacity .24s ease}
+.lightbox.is-leaving::backdrop{opacity:0}
+.lightbox.is-leaving button{opacity:0}
+
+@media(prefers-reduced-motion:reduce){
+ .search-dialog::backdrop,.lightbox::backdrop{animation:none!important;transition:none!important}
+ .like-burst{display:none}
+}

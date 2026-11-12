@@ -1,4 +1,4 @@
-import {startBackground} from './background';import {startKiln,kilnPage} from './kiln';
+import {startBackground} from './background';import {startKiln,kilnPage} from './kiln';import {startMotion,motionPage,revealTheme,zoomImage,markToc,burst} from './motion';
 // The ClientRouter swaps <body> on in-site navigation. Persisted regions (background, left column, notice,
 // drawer, footer, search dialog) keep their listeners, so they are wired once in boot(); everything inside
 // the swapped page (header, main, right column) is wired again by page() on every astro:page-load.
@@ -26,12 +26,12 @@ function boot(){
  // Header buttons are re-rendered on every page, so they are handled by delegation.
  document.addEventListener('click',e=>{
   const t=e.target as Element;
-  if(t.closest?.('.theme-toggle')){const theme=document.documentElement.dataset.theme==='dark'?'light':'dark';document.documentElement.dataset.theme=theme;userTheme=true;updateThemeButton();try{localStorage.setItem('blog-theme',theme)}catch{}}
+  if(t.closest?.('.theme-toggle')){const theme=document.documentElement.dataset.theme==='dark'?'light':'dark';userTheme=true;try{localStorage.setItem('blog-theme',theme)}catch{}revealTheme(t.closest('.theme-toggle')!,()=>{document.documentElement.dataset.theme=theme;updateThemeButton()})}
   else if(t.closest?.('.search-trigger')){dialog.showModal();$('#site-search')?.focus();loadSearch();renderSearch()}
   else if(t.closest?.('.mobile-menu')){const drawer=$<HTMLElement>('.mobile-drawer')!;drawer.hidden=!drawer.hidden;$('.mobile-menu')?.setAttribute('aria-expanded',String(!drawer.hidden))}
   else if(t.closest?.('.back-top'))window.scrollTo({top:0,behavior:reducedMotion()?'instant':'smooth'});
  });
- routerHooks();
+ routerHooks();startMotion();
  // Persisted cards have finished their entrance; mark them so re-attaching after a swap does not replay it.
  window.setTimeout(()=>document.querySelectorAll<HTMLElement>('[data-astro-transition-persist]').forEach(el=>el.dataset.settled=''),1200);
  if(skin==='kiln')startKiln();
@@ -77,14 +77,16 @@ function trackPageview(){
 function page(){
  updateThemeButton();
  trackPageview();
- document.querySelectorAll<HTMLButtonElement>('[data-copy]').forEach(b=>b.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(b.closest('.code-block')!.querySelector('code')!.textContent||'');b.textContent='已复制'}catch{b.textContent='请选中代码复制'}}));
+ // Copy feedback returns to the original label after a moment.
+ document.querySelectorAll<HTMLButtonElement>('[data-copy]').forEach(b=>{const label=b.textContent||'复制';let reset=0;b.addEventListener('click',async()=>{let copied=true;try{await navigator.clipboard.writeText(b.closest('.code-block')!.querySelector('code')!.textContent||'')}catch{copied=false}b.textContent=copied?'已复制':'请选中代码复制';b.classList.toggle('is-copied',copied);clearTimeout(reset);reset=window.setTimeout(()=>{b.textContent=label;b.classList.remove('is-copied')},1800)})});
  $('.share-button')?.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(location.href);$('.share-button')!.textContent='链接已复制'}catch{$('.share-button')!.textContent='请复制地址栏链接'}});
- document.querySelectorAll<HTMLImageElement>('.prose img').forEach(img=>img.addEventListener('click',()=>{const dialog=document.createElement('dialog');dialog.className='lightbox';const full=document.createElement('img');full.src=img.src;full.alt=img.alt;const close=document.createElement('button');close.textContent='关闭';close.onclick=()=>dialog.close();dialog.append(full,close);dialog.addEventListener('click',e=>{if(e.target===dialog)dialog.close()});dialog.addEventListener('close',()=>dialog.remove());document.body.append(dialog);dialog.showModal()}));
+ document.querySelectorAll<HTMLImageElement>('.prose img').forEach(img=>img.addEventListener('click',()=>zoomImage(img)));
  const id=$<HTMLElement>('main')?.dataset.documentId;
- async function comments(){if(!id||!$('.comment-list'))return;try{const rows=await(await fetch(`/api/public/documents/${id}/comments`)).json();const list=$('.comment-list')!;list.replaceChildren();if(!rows.length)list.textContent='还没有评论，欢迎留下你的想法。';for(const c of rows){const item=document.createElement('div');item.className='comment-item';const name=document.createElement('strong');name.textContent=c.author;const time=document.createElement('time');time.textContent=new Date(c.created_at).toLocaleDateString('zh-CN');const body=document.createElement('p');body.textContent=c.content;item.append(name,time,body);list.append(item)}}catch{const list=$('.comment-list');if(list)list.textContent='评论暂时无法加载。'}}
- if(id){comments();fetch(`/api/public/documents/${id}/visit`,{method:'POST'}).then(r=>r.json()).then(s=>{if($('.visit-count'))$('.visit-count')!.textContent=s.visits}).catch(()=>{});$('.like-button')?.addEventListener('click',async()=>{try{const r=await fetch(`/api/public/documents/${id}/like`,{method:'POST'});const s=await r.json();if(r.ok){$('.like-count')!.textContent=s.likes;($('.like-button') as HTMLButtonElement).disabled=true}}catch{}})}
+ async function comments(){if(!id||!$('.comment-list'))return;try{const rows=await(await fetch(`/api/public/documents/${id}/comments`)).json();const list=$('.comment-list')!;list.replaceChildren();if(!rows.length)list.textContent='还没有评论，欢迎留下你的想法。';for(const [n,c] of rows.entries()){const item=document.createElement('div');item.className='comment-item';item.style.setProperty('--i',String(Math.min(n,8)));const name=document.createElement('strong');name.textContent=c.author;const time=document.createElement('time');time.textContent=new Date(c.created_at).toLocaleDateString('zh-CN');const body=document.createElement('p');body.textContent=c.content;item.append(name,time,body);list.append(item)}}catch{const list=$('.comment-list');if(list)list.textContent='评论暂时无法加载。'}}
+ if(id){comments();fetch(`/api/public/documents/${id}/visit`,{method:'POST'}).then(r=>r.json()).then(s=>{if($('.visit-count'))$('.visit-count')!.textContent=s.visits}).catch(()=>{});$('.like-button')?.addEventListener('click',async()=>{try{const r=await fetch(`/api/public/documents/${id}/like`,{method:'POST'});const s=await r.json();if(r.ok){const button=$<HTMLButtonElement>('.like-button')!;$('.like-count')!.textContent=s.likes;button.disabled=true;button.classList.add('is-liked');burst(button)}}catch{}})}
  $('.comment-form')?.addEventListener('submit',async e=>{e.preventDefault();const form=e.target as HTMLFormElement;const button=form.querySelector('button')!;button.disabled=true;try{const values=Object.fromEntries(new FormData(form));const r=await fetch(`/api/public/documents/${id}/comments`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(values)});const result=await r.json();if(!r.ok)throw new Error(result.message||'提交失败');$('.form-status')!.textContent='评论已提交，审核后显示。';form.reset()}catch(e){$('.form-status')!.textContent=(e as Error).message}finally{button.disabled=false}});
- const headings=document.querySelectorAll('.prose h1,.prose h2,.prose h3,.prose h4,.prose h5,.prose h6');if(headings.length&&'IntersectionObserver' in window){const observer=new IntersectionObserver(entries=>{if(!document.contains(headings[0]))return observer.disconnect();for(const entry of entries)if(entry.isIntersecting){document.querySelectorAll('.toc a').forEach(a=>a.classList.toggle('current',a.getAttribute('href')===`#${entry.target.id}`))}},{rootMargin:'-70px 0px -70% 0px'});headings.forEach(h=>observer.observe(h));document.addEventListener('astro:before-swap',()=>observer.disconnect(),{once:true})}
+ const headings=document.querySelectorAll('.prose h1,.prose h2,.prose h3,.prose h4,.prose h5,.prose h6');if(headings.length&&'IntersectionObserver' in window){const observer=new IntersectionObserver(entries=>{if(!document.contains(headings[0]))return observer.disconnect();for(const entry of entries)if(entry.isIntersecting){document.querySelectorAll('.toc a').forEach(a=>a.classList.toggle('current',a.getAttribute('href')===`#${entry.target.id}`));markToc()}},{rootMargin:'-70px 0px -70% 0px'});headings.forEach(h=>observer.observe(h));document.addEventListener('astro:before-swap',()=>observer.disconnect(),{once:true})}
+ motionPage();
  if(skin==='kiln')kilnPage();
 }
 
