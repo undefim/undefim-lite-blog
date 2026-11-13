@@ -88,29 +88,54 @@
 :root[data-skin=kiln] .is-reading .mascot-look{transform:translate(1px,1px)!important}
 :root[data-skin=kiln] .is-reading .mascot svg{animation:kiln-nod .5s ease-in-out infinite}
 :root[data-skin=kiln] .mascot.is-hopping svg{animation:kiln-hop .55s var(--ease)}
-/* shy: a password field has focus, so it covers its eyes (after the classic animated login avatars). The side arms
-   hand over to two forearms and paws that rise from below to the eyes with a small overshoot; then the paws bob and the left one now and then
-   dips to peek. Leaving the field (.is-uncovering, set by the admin) lowers them back to the arms. Paws use `translate`
-   for the rise and `transform` for the idle motion so the two never fight. */
+/* shy: a password field has focus, so it covers its eyes. The side arms become two light mittens that swing up to
+   the face with a small overshoot while the body squashes; a little mouth and rosy cheeks appear. While covered it
+   rocks gently, and every few seconds the left mitten dips so one eye can peek left and right before it snaps back.
+   Typing (.is-typing, pulsed by the admin) makes it bob. Leaving the field (.is-uncovering) drops the mittens back to
+   the sides with a relieved smile. The swing uses `translate` and the idle motion `transform`, so the two never fight. */
 :root[data-skin=kiln] .mascot-hands{display:none}
 :root[data-skin=kiln] [data-pose=shy] .mascot-hands,:root[data-skin=kiln] .is-uncovering .mascot-hands{display:inline}
-:root[data-skin=kiln] .paw-shade{fill:#a85a42}
-:root[data-skin=kiln] .paw-skin{fill:#e58b6c}
-:root[data-skin=kiln] [data-pose=shy] .mascot-look{transform:none!important}
-:root[data-skin=kiln] [data-pose=shy] .mascot-blush{display:inline}
-:root[data-skin=kiln] [data-pose=shy] .mascot-arm{opacity:0}
-:root[data-skin=kiln] [data-pose=shy] .paw-l{animation:kiln-paw-l-up .5s cubic-bezier(.34,1.5,.6,1) both,kiln-paw-peek 4.2s ease-in-out 1.4s infinite}
-:root[data-skin=kiln] [data-pose=shy] .paw-r{animation:kiln-paw-r-up .5s cubic-bezier(.34,1.5,.6,1) .06s both,kiln-paw-bob 2.6s ease-in-out .6s infinite}
-:root[data-skin=kiln] .is-uncovering .paw-l{animation:kiln-paw-l-down .38s cubic-bezier(.5,0,.75,0) both}
-:root[data-skin=kiln] .is-uncovering .paw-r{animation:kiln-paw-r-down .38s cubic-bezier(.5,0,.75,0) .04s both}
-:root[data-skin=kiln] .is-uncovering .mascot-arm{animation:kiln-arm-return .42s step-end both}
-@keyframes kiln-paw-l-up{0%{translate:0 4px;opacity:0}20%{opacity:1}100%{translate:0 0;opacity:1}}
-@keyframes kiln-paw-r-up{0%{translate:0 4px;opacity:0}20%{opacity:1}100%{translate:0 0;opacity:1}}
-@keyframes kiln-paw-l-down{0%{translate:0 0;opacity:1}85%{opacity:1}100%{translate:0 4px;opacity:0}}
-@keyframes kiln-paw-r-down{0%{translate:0 0;opacity:1}85%{opacity:1}100%{translate:0 4px;opacity:0}}
+:root[data-skin=kiln] .paw-skin{fill:#f8cdb2}
+:root[data-skin=kiln] .paw-light{fill:#fff0e2}
+:root[data-skin=kiln] .paw-shade{fill:#a9573e}
+:root[data-skin=kiln] .paw-arm-skin{fill:#e8957a}
+:root[data-skin=kiln] .shy-cheeks rect{fill:#ff9a8c}
+:root[data-skin=kiln] [data-pose=shy] .mascot-blush,:root[data-skin=kiln] .is-uncovering .mascot-blush{display:none}
+:root[data-skin=kiln] [data-pose=shy] .mascot-arm{opacity:0;transition:none}
+:root[data-skin=kiln] [data-pose=shy] .mascot svg{animation:kiln-shy-in .5s var(--spring),kiln-shy-rock 2.8s ease-in-out .5s infinite}
+:root[data-skin=kiln] [data-pose=shy] .mascot-look{animation:kiln-shy-glance 5.2s steps(1) 1.6s infinite both}
+:root[data-skin=kiln] [data-pose=shy] .shy-cheeks{animation:kiln-shy-flush 5.2s ease-in-out 1.6s infinite}
+:root[data-skin=kiln] [data-pose=shy] .shy-mouth{animation:kiln-shy-mouth .3s steps(1) both}
+:root[data-skin=kiln] [data-pose=shy] .paw-l{animation:kiln-paw-l-up .46s var(--spring) both}
+:root[data-skin=kiln] [data-pose=shy] .paw-l .paw-mitt{animation:kiln-paw-peek 5.2s cubic-bezier(.3,1.4,.5,1) 1.6s infinite}
+:root[data-skin=kiln] [data-pose=shy] .paw-l .paw-arm{animation:kiln-paw-arm-in .46s steps(1) both,kiln-paw-peek-arm 5.2s steps(1) 1.6s infinite}
+:root[data-skin=kiln] [data-pose=shy] .paw-r{animation:kiln-paw-r-up .46s var(--spring) .07s both,kiln-paw-bob 2.8s ease-in-out .9s infinite}
+:root[data-skin=kiln] [data-pose=shy] .paw-arm{animation:kiln-paw-arm-in .46s steps(1) both}
+:root[data-skin=kiln] [data-pose=shy].is-typing .mascot svg{animation:kiln-shy-tap .2s ease-out}
+:root[data-skin=kiln] .is-uncovering .eyes-open{display:none}
+:root[data-skin=kiln] .is-uncovering .eyes-happy{display:inline}
+:root[data-skin=kiln] .is-uncovering .paw-arm{display:none}
+:root[data-skin=kiln] .is-uncovering .paw-l{animation:kiln-paw-l-down .34s cubic-bezier(.5,0,.8,.4) both}
+:root[data-skin=kiln] .is-uncovering .paw-r{animation:kiln-paw-r-down .34s cubic-bezier(.5,0,.8,.4) .04s both}
+:root[data-skin=kiln] .is-uncovering .mascot-arm{animation:kiln-arm-return .4s step-end both}
+:root[data-skin=kiln] .is-uncovering .mascot svg{animation:kiln-shy-out .6s var(--spring)}
+@keyframes kiln-paw-l-up{0%{translate:-4px 3px;opacity:0}15%{opacity:1}100%{translate:0 0;opacity:1}}
+@keyframes kiln-paw-r-up{0%{translate:4px 3px;opacity:0}15%{opacity:1}100%{translate:0 0;opacity:1}}
+@keyframes kiln-paw-l-down{0%{translate:0 0;opacity:1}80%{opacity:1}100%{translate:-4px 3px;opacity:0}}
+@keyframes kiln-paw-r-down{0%{translate:0 0;opacity:1}80%{opacity:1}100%{translate:4px 3px;opacity:0}}
+@keyframes kiln-paw-arm-in{0%{opacity:0}70%,100%{opacity:1}}
 @keyframes kiln-arm-return{0%{opacity:0}100%{opacity:1}}
-@keyframes kiln-paw-bob{0%,100%{transform:none}50%{transform:translateY(-1px)}}
-@keyframes kiln-paw-peek{0%,58%,100%{transform:none}66%,80%{transform:translateY(2px)}}
+@keyframes kiln-paw-bob{0%,100%{transform:none}50%{transform:translateY(-.5px)}}
+/* One peek per cycle: dip, hold while the eye looks both ways, then snap back a little too far and settle. */
+@keyframes kiln-paw-peek{0%,52%,100%{transform:none}58%,80%{transform:translate(-1px,3px)}85%{transform:translateY(-1px)}90%{transform:none}}
+@keyframes kiln-paw-peek-arm{0%,56%,84%,100%{transform:none}58%{transform:translateY(1px)}}
+@keyframes kiln-shy-glance{0%,56%,86%,100%{transform:none}60%{transform:translateX(1px)}70%{transform:translateX(-1px)}}
+@keyframes kiln-shy-flush{0%,80%,100%{opacity:.75}86%,94%{opacity:1}}
+@keyframes kiln-shy-mouth{0%{opacity:0}60%,100%{opacity:1}}
+@keyframes kiln-shy-in{0%{transform:none}30%{transform:scale(1.07,.9)}65%{transform:scale(.96,1.05)}100%{transform:none}}
+@keyframes kiln-shy-rock{0%,100%{transform:rotate(-2deg)}50%{transform:rotate(2deg)}}
+@keyframes kiln-shy-tap{0%{transform:scale(1.05,.93)}100%{transform:none}}
+@keyframes kiln-shy-out{0%{transform:none}35%{transform:translateY(-10%) scale(.97,1.05)}70%{transform:scale(1.04,.95)}100%{transform:none}}
 :root[data-skin=kiln] [data-pose=cheer] .eyes-open{display:none}
 :root[data-skin=kiln] [data-pose=cheer] .eyes-happy,:root[data-skin=kiln] [data-pose=cheer] .mascot-blush{display:inline}
 :root[data-skin=kiln] [data-pose=cheer] .mascot-arm{transform:translateY(-3px)}
