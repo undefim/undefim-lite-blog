@@ -32,7 +32,7 @@ const random=(min:number,max:number)=>min+Math.random()*(max-min);
 //  building  -> the fire burns brighter and the mascot walks over to warm its hands (a publish is "firing the kiln")
 //  busy      -> a save or request is in flight: the mascot nods
 //  notice    -> a toast appeared: cheer on success, startle on error
-//  shy       -> a password field has focus: it covers its eyes
+//  shy       -> a password field has focus: it covers its eyes, peeks now and then and bobs with each keystroke
 // Idle behaviour (blinking, looking around, nodding off after a while) pauses with the tab and reduced motion.
 export function KilnCompanion({variant='sidebar',building=false,busy=false,shy=false,notice=null}:Props){
  const stage=useRef<HTMLDivElement>(null),walker=useRef<HTMLSpanElement>(null);
@@ -65,7 +65,7 @@ export function KilnCompanion({variant='sidebar',building=false,busy=false,shy=f
    else if(building&&atFire)pose='warm';
    else if(asleep)pose='doze';
    else if(gaze)pose='gaze';
-   if(w.dataset.pose==='shy'&&pose!=='shy'){w.classList.remove('is-uncovering');void w.offsetWidth;w.classList.add('is-uncovering');clearTimeout(turnBack);turnBack=window.setTimeout(()=>w.classList.remove('is-uncovering'),450)}
+   if(w.dataset.pose==='shy'&&pose!=='shy'){w.classList.remove('is-uncovering');void w.offsetWidth;w.classList.add('is-uncovering');clearTimeout(turnBack);turnBack=window.setTimeout(()=>w.classList.remove('is-uncovering'),650)}
    w.dataset.pose=pose;
    w.classList.toggle('is-reading',busy&&!building&&pose==='idle');
    root.toggleAttribute('data-stoked',building);
@@ -111,6 +111,13 @@ export function KilnCompanion({variant='sidebar',building=false,busy=false,shy=f
   window.addEventListener('pointermove',onMove,{passive:true});
   const onDown=(e:PointerEvent)=>{if(!button.contains(e.target as Node))wake()};
   window.addEventListener('keydown',wake);window.addEventListener('pointerdown',onDown);
+  // Each character typed into the password field makes the covered mascot bob.
+  let typing=0;
+  const onType=(e:Event)=>{
+   if(!live.current.shy||motion()||(e.target as HTMLInputElement)?.type!=='password')return;
+   w.classList.remove('is-typing');void w.offsetWidth;w.classList.add('is-typing');clearTimeout(typing);typing=window.setTimeout(()=>w.classList.remove('is-typing'),220);
+  };
+  document.addEventListener('input',onType);
 
   const blink=()=>{if(!motion()&&['idle','gaze','walk'].includes(w.dataset.pose||'')){w.classList.add('is-blinking');after(()=>w.classList.remove('is-blinking'),140)}later(blink,2500,6500)};
   later(blink,800,4000);
@@ -133,7 +140,7 @@ export function KilnCompanion({variant='sidebar',building=false,busy=false,shy=f
   refresh();wasBuilding=false;sync();
 
   return()=>{
-   dead=true;control.current=null;timers.forEach(clearTimeout);clearInterval(drowse);clearTimeout(bubbleTimer);clearTimeout(arrival);cancelAnimationFrame(pending);
+   dead=true;control.current=null;timers.forEach(clearTimeout);clearInterval(drowse);clearTimeout(bubbleTimer);clearTimeout(arrival);clearTimeout(typing);clearTimeout(turnBack);cancelAnimationFrame(pending);document.removeEventListener('input',onType);
    window.removeEventListener('pointermove',onMove);window.removeEventListener('keydown',wake);window.removeEventListener('pointerdown',onDown);
   };
  },[variant]);
